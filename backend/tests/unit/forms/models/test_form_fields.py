@@ -2,7 +2,7 @@
 
 Covers shared field constraints, the field-type discriminated union,
 option sources, and FormDefinition-level validators (unique names,
-timezone, CSS screening, static-option defaults).
+static-option defaults).
 """
 
 from typing import Any
@@ -31,9 +31,9 @@ def _text(**overrides: Any) -> dict[str, Any]:  # noqa: ANN401
     return {"type": "text", "value_name": "username", "label": "Username", **overrides}
 
 
-def _form(*fields: dict[str, Any], **overrides: Any) -> FormDefinition:  # noqa: ANN401
+def _form(*fields: dict[str, Any]) -> FormDefinition:
     """Build a FormDefinition from raw field payloads."""
-    return FormDefinition.model_validate({"fields": list(fields), **overrides})
+    return FormDefinition.model_validate({"fields": list(fields)})
 
 
 class TestFormFieldBase:
@@ -171,46 +171,6 @@ class TestFormDefinition:
     def test_distinct_field_names_allowed(self) -> None:
         """Distinct value_names pass."""
         assert len(_form(_text(), _text(value_name="other")).fields) == 2
-
-    @pytest.mark.parametrize("timezone", ["America/New_York", "UTC", None])
-    def test_valid_timezone(self, timezone: str | None) -> None:
-        """Valid IANA identifiers (and None) are accepted."""
-        assert _form(_text(), timezone=timezone).timezone == timezone
-
-    def test_invalid_timezone_rejected(self) -> None:
-        """An unknown timezone is rejected."""
-        with pytest.raises(ValidationError, match="Invalid timezone"):
-            _form(_text(), timezone="Not/AZone")
-
-    @pytest.mark.parametrize(
-        "css",
-        [
-            None,
-            ".form { color: red; }",
-            ".logo { background: url(data:image/png;base64,iVBORw0KGgo=); }",
-            ".form { background: URL( 'data:image/gif;base64,R0lGOD' ); }",
-        ],
-    )
-    def test_safe_css_accepted(self, css: str | None) -> None:
-        """Plain CSS and data: URIs pass screening."""
-        assert _form(_text(), css_override=css).css_override == css
-
-    @pytest.mark.parametrize(
-        "css",
-        [
-            "<script>alert(1)</script>",
-            "@import url(data:text/css,x);",
-            "@IMPORT 'other.css';",
-            ".a { width: expression(alert(1)); }",
-            ".a { background: url(https://evil.com/x.png); }",
-            ".a { background: url(//evil.com/x.png); }",
-            ".a { background: url('http://evil.com/x.png'); }",
-        ],
-    )
-    def test_dangerous_css_rejected(self, css: str) -> None:
-        """XSS and exfiltration vectors are rejected."""
-        with pytest.raises(ValidationError, match="CSS override"):
-            _form(_text(), css_override=css)
 
 
 class TestStaticOptionDefaults:

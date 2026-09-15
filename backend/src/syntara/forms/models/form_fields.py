@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Discriminator, Field, field_validator, model_validator
-
-from syntara.workflows.workflow_engine.models.workflow_definition import (
-    _get_valid_timezones,
-)
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, model_validator
 
 FIELD_NAME_PATTERN = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
 
@@ -143,60 +138,6 @@ class FormDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     fields: list[FormField] = Field(min_length=1, max_length=100)
-    submit_label: str | None = Field(default=None, max_length=100)
-    success_message: str | None = Field(default=None, max_length=1000)
-    css_override: str | None = Field(default=None, max_length=4096)
-    timezone: str | None = None
-
-    @field_validator("timezone")
-    @classmethod
-    def _valid_tz(cls, v: str | None) -> str | None:
-        """Validate timezone against pytz's database."""
-        if v is None:
-            return None
-        valid_tzs = _get_valid_timezones()
-        if v not in valid_tzs:
-            msg = f"Invalid timezone: {v}. Must be a valid IANA timezone identifier."
-            raise ValueError(msg)
-        return v
-
-    @field_validator("css_override")
-    @classmethod
-    def _screen_css(cls, css: str | None) -> str | None:
-        """Screen CSS for XSS vectors and breakout patterns."""
-        if css is None:
-            return None
-
-        # Check for dangerous patterns (case-insensitive)
-        css_lower = css.lower()
-
-        # HTML tag breakout
-        if "<" in css:
-            msg = "CSS override cannot contain '<' (HTML tag breakout risk)"
-            raise ValueError(msg)
-
-        # @import can load external resources
-        if "@import" in css_lower:
-            msg = "CSS override cannot contain '@import'"
-            raise ValueError(msg)
-
-        # IE-specific expression() allows arbitrary JavaScript
-        if "expression(" in css_lower:
-            msg = "CSS override cannot contain 'expression('"
-            raise ValueError(msg)
-
-        # url() with non-data: schemes can exfiltrate data
-        # Allow data: URIs but reject http://, https://, // (protocol-relative)
-        if "url(" in css_lower:
-            # Extract everything between url( and )
-            url_pattern = re.compile(r'url\s*\(\s*["\']?([^)"\'\s]+)', re.IGNORECASE)
-            for match in url_pattern.finditer(css):
-                url_value = match.group(1).strip()
-                if not url_value.startswith("data:"):
-                    msg = "CSS override url() must use data: URIs only (no external resources)"
-                    raise ValueError(msg)
-
-        return css
 
     @model_validator(mode="after")
     def _unique_names(self) -> FormDefinition:
