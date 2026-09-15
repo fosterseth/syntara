@@ -4,7 +4,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from syntara.forms.models import FormDefinition, FormPrompt, FormPromptStatus, TextField
+from syntara.forms.models.api_models import FormPromptStatus
+from syntara.forms.models.form_fields import FormDefinition, TextField
+from syntara.forms.models.form_prompt import FormPrompt
 
 
 def create_test_form_prompt(

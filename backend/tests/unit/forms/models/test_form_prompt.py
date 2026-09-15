@@ -10,7 +10,9 @@ import pytest
 from pydantic import ValidationError
 
 from syntara.core.constants import FieldLimits
-from syntara.forms.models import FormDefinition, FormPrompt, FormPromptStatus, TextField
+from syntara.forms.models.api_models import FormPromptStatus
+from syntara.forms.models.form_fields import FormDefinition, TextField
+from syntara.forms.models.form_prompt import FormPrompt
 from tests.unit.fixtures.form import create_test_form_prompt
 
 _FORM_DEFINITION = FormDefinition(fields=[TextField(type="text", value_name="reason", label="Reason")])

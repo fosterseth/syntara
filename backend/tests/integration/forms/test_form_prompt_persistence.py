@@ -11,15 +11,15 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from syntara.forms.models import (
+from syntara.forms.models.api_models import FormPromptStatus
+from syntara.forms.models.form_fields import (
     DropdownField,
     FormDefinition,
-    FormPrompt,
-    FormPromptStatus,
     StaticOption,
     StaticOptions,
     TextField,
 )
+from syntara.forms.models.form_prompt import FormPrompt
 from tests.unit.fixtures.form import create_submitted_form_prompt, create_test_form_prompt
 
 _FORM_DEFINITION = FormDefinition(fields=[TextField(type="text", value_name="reason", label="Reason")])

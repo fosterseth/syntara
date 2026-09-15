@@ -9,7 +9,7 @@ from uuid import UUID
 
 from syntara.core.exception_registry import fastapi_exception
 from syntara.core.exceptions import SyntaraError
-from syntara.forms.models import FormPromptStatus
+from syntara.forms.models.api_models import FormPromptStatus
 from syntara.forms.models.form_errors import FormFieldError
 
 
