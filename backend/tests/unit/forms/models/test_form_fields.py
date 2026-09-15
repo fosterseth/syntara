@@ -139,14 +139,14 @@ class TestOptions:
         form = _form(
             _text(
                 type="multi_select",
-                options={"source": "dynamic", "expression": "{{ nodes.a.output }}", "label_key": "name"},
+                options={"source": "dynamic", "expression": "${a.output}", "label_key": "name"},
             )
         )
 
         field = form.fields[0]
         assert isinstance(field, MultiSelectField)
         assert isinstance(field.options, DynamicOptions)
-        assert field.options.expression == "{{ nodes.a.output }}"
+        assert field.options.expression == "${a.output}"
         assert field.options.value_key is None
 
     def test_unknown_source_rejected(self) -> None:
@@ -253,7 +253,7 @@ class TestStaticOptionDefaults:
         form = _form(
             _text(
                 type="dropdown",
-                options={"source": "dynamic", "expression": "{{ nodes.a.output }}"},
+                options={"source": "dynamic", "expression": "${a.output}"},
                 default="anything",
             )
         )

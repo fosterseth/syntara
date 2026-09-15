@@ -243,7 +243,7 @@ class TestOptionMembership:
             _field(
                 "dropdown",
                 "pick",
-                options={"source": "dynamic", "expression": "{{ nodes.a.output }}"},
+                options={"source": "dynamic", "expression": "${a.output}"},
             )
         )
 
