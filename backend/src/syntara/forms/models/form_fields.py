@@ -6,6 +6,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, model_validator
 
+from syntara.core.constants import FieldLimits
+
 FIELD_NAME_PATTERN = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
 
 
@@ -61,6 +63,14 @@ class CheckboxField(FormFieldBase):
 
     type: Literal["checkbox"]
     default: bool = False
+    required: bool = Field(
+        default=False,
+        description=(
+            "When true the checkbox must be checked to submit, rather than merely "
+            "being present (the terms-of-service pattern). An unchecked required "
+            "checkbox fails with error code 'must_be_checked'."
+        ),
+    )
 
 
 class DateField(FormFieldBase):
@@ -76,7 +86,7 @@ class StaticOption(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     display_label: str = Field(min_length=1, max_length=200)
-    value: str | float | bool
+    value: str | int | float | bool
 
 
 class StaticOptions(BaseModel):
@@ -85,7 +95,7 @@ class StaticOptions(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source: Literal["static"]
-    values: list[StaticOption] = Field(min_length=1, max_length=500)
+    values: list[StaticOption] = Field(min_length=1, max_length=FieldLimits.FORM_OPTIONS_MAX_LENGTH)
 
 
 class DynamicOptions(BaseModel):
@@ -107,7 +117,7 @@ class DropdownField(FormFieldBase):
 
     type: Literal["dropdown"]
     options: OptionsSource
-    default: str | float | bool | None = None
+    default: str | int | float | bool | None = None
 
 
 class MultiSelectField(FormFieldBase):

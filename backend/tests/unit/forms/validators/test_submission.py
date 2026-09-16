@@ -1,18 +1,30 @@
 """Unit tests for form submission validation and coercion."""
 
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 
 from syntara.forms.exceptions import FormDataValidationError
-from syntara.forms.models.form_fields import FormDefinition
-from syntara.forms.validators.submission import validate_form_submission
+from syntara.forms.models.form_fields import FormDefinition, FormField
+from syntara.forms.validators.submission import _COERCERS, validate_form_submission
 
 _STATIC_OPTIONS: dict[str, Any] = {
     "source": "static",
     "values": [
         {"display_label": "A", "value": "a"},
         {"display_label": "B", "value": "b"},
+    ],
+}
+
+# Every field type that _coerce_field routes through _coerce_string.
+# "email" is excluded: it adds a format check on top (see TestEmailField).
+_STRING_FIELD_TYPES = ["text", "textarea", "masked_text"]
+
+_NUMERIC_OPTIONS: dict[str, Any] = {
+    "source": "static",
+    "values": [
+        {"display_label": "Five", "value": 5},
+        {"display_label": "Six", "value": 6},
     ],
 }
 
@@ -153,12 +165,34 @@ class TestCoercion:
 
         assert [e.code for e in errors] == ["type"]
 
-    def test_required_checkbox_must_be_checked(self) -> None:
-        """A required checkbox submitted as False fails (terms-of-service pattern)."""
-        errors = _errors(_form(_field("checkbox", "agree", required=True)), {"agree": False})
+    @pytest.mark.parametrize(
+        "submitted",
+        [{"agree": False}, {}],
+        ids=["explicit_false", "absent_from_submission"],
+    )
+    def test_required_checkbox_must_be_checked(self, submitted: dict[str, Any]) -> None:
+        """A required checkbox that is not ticked fails (terms-of-service pattern).
 
-        assert [(e.field, e.code) for e in errors] == [("agree", "type")]
+        Covers both an explicit False and an omitted key - CheckboxField.default
+        is a concrete False, so an absent checkbox is filled in by the default
+        rather than reported as "required".
+        """
+        errors = _errors(_form(_field("checkbox", "agree", required=True)), submitted)
+
+        assert [(e.field, e.code) for e in errors] == [("agree", "must_be_checked")]
         assert "must be checked" in errors[0].message
+
+    def test_required_checkbox_checked_passes(self) -> None:
+        """A ticked required checkbox passes."""
+        form = _form(_field("checkbox", "agree", required=True))
+
+        assert validate_form_submission(form, {"agree": True}) == {"agree": True}
+
+    def test_unparseable_required_checkbox_is_a_type_error(self) -> None:
+        """A coercion failure stays "type", distinct from "must_be_checked"."""
+        errors = _errors(_form(_field("checkbox", "agree", required=True)), {"agree": "maybe"})
+
+        assert [e.code for e in errors] == ["type"]
 
     @pytest.mark.parametrize(("raw", "expected"), [("2026-01-05", "2026-01-05"), ("20260105", "2026-01-05")])
     def test_date_accepted(self, raw: str, expected: str) -> None:
@@ -174,10 +208,22 @@ class TestCoercion:
 
         assert [e.code for e in errors] == ["type"]
 
+    @pytest.mark.parametrize("field_type", _STRING_FIELD_TYPES)
+    def test_string_family_accepted(self, field_type: str) -> None:
+        """Every field type routed through _coerce_string accepts a string.
+
+        Pins the isinstance dispatch tuple in _coerce_field: narrowing it would
+        drop a type into the "Unknown field type" branch, which this catches.
+        """
+        cleaned = validate_form_submission(_form(_field(field_type, "name")), {"name": "bob"})
+
+        assert cleaned == {"name": "bob"}
+
+    @pytest.mark.parametrize("field_type", _STRING_FIELD_TYPES)
     @pytest.mark.parametrize("raw", [123, 4.5, True, ["a"], {"a": 1}])
-    def test_text_rejects_non_strings(self, raw: Any) -> None:  # noqa: ANN401
-        """Text fields do not silently stringify non-string input."""
-        errors = _errors(_form(_field("text", "name")), {"name": raw})
+    def test_string_family_rejects_non_strings(self, field_type: str, raw: Any) -> None:  # noqa: ANN401
+        """String fields do not silently stringify non-string input."""
+        errors = _errors(_form(_field(field_type, "name")), {"name": raw})
 
         assert [e.code for e in errors] == ["type"]
 
@@ -204,6 +250,107 @@ class TestCoercion:
         errors = _errors(form, {"pick": ["a"]})
 
         assert [e.code for e in errors] == ["type"]
+
+    @pytest.mark.parametrize("field_type", ["dropdown", "multi_select"])
+    def test_int_accepted_and_not_normalized(self, field_type: str) -> None:
+        """Both option field types accept a bare int and preserve it as an int."""
+        form = _form(_field(field_type, "pick", options=_NUMERIC_OPTIONS))
+
+        cleaned = validate_form_submission(form, {"pick": 5})
+
+        value = cleaned["pick"][0] if field_type == "multi_select" else cleaned["pick"]
+        assert value == 5
+        assert isinstance(value, int)
+
+    @pytest.mark.parametrize("field_type", ["dropdown", "multi_select"])
+    def test_float_matches_int_option(self, field_type: str) -> None:
+        """A float submission matches an int option, since 5.0 == 5."""
+        form = _form(_field(field_type, "pick", options=_NUMERIC_OPTIONS))
+
+        cleaned = validate_form_submission(form, {"pick": 5.0})
+
+        assert cleaned["pick"] == ([5.0] if field_type == "multi_select" else 5.0)
+
+    @pytest.mark.parametrize("bad", [{"a": 1}, [1], None])
+    def test_multi_select_rejects_non_scalar_elements(self, bad: Any) -> None:  # noqa: ANN401
+        """Unhashable/unsupported list elements are a type error, not a crash.
+
+        Regression: these previously bypassed coercion and reached the option
+        membership set test, raising TypeError: unhashable type.
+        """
+        form = _form(_field("multi_select", "picks", options=_STATIC_OPTIONS))
+
+        errors = _errors(form, {"picks": [bad]})
+
+        assert [e.code for e in errors] == ["type"]
+
+
+class TestCoercerDispatch:
+    """The dispatch table stays in sync with the FormField union."""
+
+    def test_every_field_type_has_a_coercer(self) -> None:
+        """A new field type must be registered in _COERCERS.
+
+        Without this, adding a union member and forgetting the table entry
+        fails at runtime with "Unknown field type" instead of at CI time.
+        """
+        union, _discriminator = get_args(FormField)
+        members = set(get_args(union))
+
+        assert members, "FormField union introspection returned nothing - the test needs updating"
+        assert members - set(_COERCERS) == set()
+
+    def test_no_stale_coercer_entries(self) -> None:
+        """A removed field type must not linger in the table."""
+        union, _discriminator = get_args(FormField)
+
+        assert set(_COERCERS) - set(get_args(union)) == set()
+
+
+class TestEmailField:
+    """Email fields validate format on top of the shared string coercion."""
+
+    @pytest.mark.parametrize("raw", ["bob@example.com", "first.last+tag@sub.example.co.uk"])
+    def test_valid_email_accepted(self, raw: str) -> None:
+        """Well-formed addresses pass through."""
+        cleaned = validate_form_submission(_form(_field("email", "contact")), {"contact": raw})
+
+        assert cleaned == {"contact": raw}
+
+    def test_domain_is_normalized(self) -> None:
+        """The domain is lowercased; the local part is left alone.
+
+        Local parts are case-sensitive per RFC 5321, so only the domain is
+        folded. This is what reaches the workflow namespace.
+        """
+        cleaned = validate_form_submission(_form(_field("email", "contact")), {"contact": "Bob@Example.COM"})
+
+        assert cleaned == {"contact": "Bob@example.com"}
+
+    @pytest.mark.parametrize(
+        "raw",
+        ["bob", "bob@", "@example.com", "bob @example.com", "bob@localhost", "bob@example"],
+    )
+    def test_malformed_email_is_invalid_format(self, raw: str) -> None:
+        """A string that is not an address reports 'invalid_format', not 'type'."""
+        errors = _errors(_form(_field("email", "contact")), {"contact": raw})
+
+        assert [(e.field, e.code) for e in errors] == [("contact", "invalid_format")]
+        assert errors[0].message
+
+    @pytest.mark.parametrize("raw", [123, 4.5, True, ["a@b.co"], {"a": 1}])
+    def test_non_string_is_type_not_format(self, raw: Any) -> None:  # noqa: ANN401
+        """Wrong type stays 'type'; only wrong content is 'invalid_format'."""
+        errors = _errors(_form(_field("email", "contact")), {"contact": raw})
+
+        assert [e.code for e in errors] == ["type"]
+
+    def test_error_message_excludes_pydantic_prefix(self) -> None:
+        """The user-facing message is email_validator's, not pydantic's wrapper."""
+        errors = _errors(_form(_field("email", "contact")), {"contact": "bob"})
+
+        assert "value is not a valid email address" not in errors[0].message
+        assert "@-sign" in errors[0].message
 
 
 class TestOptionMembership:

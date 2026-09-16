@@ -6,16 +6,15 @@ converts them into a static option list.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import structlog
 
+from syntara.core.constants import FieldLimits
 from syntara.forms.models.form_fields import StaticOption, StaticOptions
 
 logger = structlog.stdlib.get_logger(__name__)
-
-# Same cap as StaticOptions.values max_length
-MAX_OPTIONS = 500
 
 
 def resolve_dynamic_options(
@@ -33,7 +32,7 @@ def resolve_dynamic_options(
 
     Raises:
         TypeError: If resolved_list is not a list or contains non-scalar types
-        ValueError: If the list is empty or exceeds size limits
+        ValueError: If the list is empty, exceeds size limits, or contains NaN/Infinity
 
     """
     # Validate that resolved value is a list
@@ -47,10 +46,10 @@ def resolve_dynamic_options(
         raise TypeError(msg)
 
     # Check size cap
-    if len(resolved_list) > MAX_OPTIONS:
+    if len(resolved_list) > FieldLimits.FORM_OPTIONS_MAX_LENGTH:
         msg = (
             f"Dynamic options for field '{field_name}' produced {len(resolved_list)} options, "
-            f"exceeding the maximum of {MAX_OPTIONS}"
+            f"exceeding the maximum of {FieldLimits.FORM_OPTIONS_MAX_LENGTH}"
         )
         raise ValueError(msg)
 
@@ -67,6 +66,18 @@ def resolve_dynamic_options(
             f"All elements must be scalars (str, int, float, or bool)."
         )
         raise TypeError(msg)
+
+    # NaN/Infinity are not representable in standard JSON (json.dumps emits the
+    # non-standard NaN/Infinity tokens, which strict parsers reject), and
+    # nan != nan would silently defeat the de-duplication below. Mirrors the
+    # finiteness rule applied to submitted numbers in _coerce_number.
+    non_finite = [item for item in resolved_list if isinstance(item, float) and not math.isfinite(item)]
+    if non_finite:
+        msg = (
+            f"Dynamic options for field '{field_name}' contains non-finite numbers: "
+            f"{', '.join(str(item) for item in non_finite)}. NaN and Infinity are not accepted."
+        )
+        raise ValueError(msg)
 
     return _convert_scalars_to_options(resolved_list)
 
