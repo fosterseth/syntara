@@ -112,6 +112,35 @@ class BaseFormPrompt(BaseResource, table=False):
         description="Form definition describing the fields shown to responders",
     )
 
+    # Form presentation options (snapshotted at creation for renderer/submit service)
+    submit_label: str | None = Field(
+        default=None,
+        max_length=FieldLimits.FORM_SUBMIT_LABEL_MAX_LENGTH,
+        sa_type=String(FieldLimits.FORM_SUBMIT_LABEL_MAX_LENGTH),  # type: ignore[call-overload]
+        description="Submit button label shown to the responder",
+    )
+
+    success_message: str | None = Field(
+        default=None,
+        max_length=FieldLimits.FORM_SUCCESS_MESSAGE_MAX_LENGTH,
+        sa_type=String(FieldLimits.FORM_SUCCESS_MESSAGE_MAX_LENGTH),  # type: ignore[call-overload]
+        description="Message shown after successful form submission",
+    )
+
+    timezone: str | None = Field(
+        default=None,
+        max_length=FieldLimits.FORM_TIMEZONE_MAX_LENGTH,
+        sa_type=String(FieldLimits.FORM_TIMEZONE_MAX_LENGTH),  # type: ignore[call-overload]
+        description="IANA timezone name for interpreting date/datetime field values",
+    )
+
+    css_override: str | None = Field(
+        default=None,
+        max_length=FieldLimits.FORM_CSS_OVERRIDE_MAX_LENGTH,
+        sa_type=String(FieldLimits.FORM_CSS_OVERRIDE_MAX_LENGTH),  # type: ignore[call-overload]
+        description="Custom CSS applied to the form view",
+    )
+
     # Response fields (without responded_by)
     response_data: dict[str, Any] | None = Field(
         default=None,
