@@ -135,9 +135,9 @@ class FormPromptService:
             List of form prompts visible to the current user
 
         """
-        query = select(FormPrompt).where(FormPrompt.execution_id == execution_id)
+        query = select(FormPrompt).where(FormPrompt.execution_id == execution_id)  # type: ignore[arg-type]
         if status is not None:
-            query = query.where(FormPrompt.status == status)
+            query = query.where(FormPrompt.status == status)  # type: ignore[arg-type]
 
         result = await self.session.execute(query)
         prompts = list(result.scalars().all())
@@ -268,9 +268,9 @@ class FormPromptService:
         """
         query = (
             select(FormPrompt)
-            .where(FormPrompt.execution_id == execution_id)
-            .where(FormPrompt.prompt_node_id == prompt_node_id)
-            .where(FormPrompt.loop_iteration_path == loop_iteration_path)
+            .where(FormPrompt.execution_id == execution_id)  # type: ignore[arg-type]
+            .where(FormPrompt.prompt_node_id == prompt_node_id)  # type: ignore[arg-type]
+            .where(FormPrompt.loop_iteration_path == loop_iteration_path)  # type: ignore[arg-type]
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()

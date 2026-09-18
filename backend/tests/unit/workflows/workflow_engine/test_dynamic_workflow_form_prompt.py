@@ -16,6 +16,7 @@ import pytest
 from temporalio.exceptions import ActivityError, ApplicationError
 from temporalio.exceptions import TimeoutError as TemporalTimeoutError
 
+from syntara.core.exceptions import SafeValueError
 from syntara.workflows.utils.namespace_resolver import NamespaceResolver
 from syntara.workflows.workflow_engine.dynamic_workflow import OrchestratorWorkflow
 from syntara.workflows.workflow_engine.graph import ActivityNode, WorkflowGraph
@@ -23,17 +24,17 @@ from syntara.workflows.workflow_engine.graph_backend import InMemoryGraphBackend
 from tests.unit.workflows.workflow_engine.conftest import init_workflow_runtime
 
 _FORM_DEFINITION_ARG = 3
-_TIMEOUT_AT_ARG = 5
-_RESPONDER_USER_IDS_ARG = 6
-_RESPONDER_GROUP_IDS_ARG = 7
-_LOOP_PATH_ARG = 9
-_TEMPORAL_ID_ARG = 10
-_MESSAGE_ARG = 11
-_SUBMIT_LABEL_ARG = 12
-_SUCCESS_MESSAGE_ARG = 13
-_TIMEZONE_ARG = 14
-_CSS_OVERRIDE_ARG = 15
-_NEW_FORM_PROMPT_ARG_COUNT = 16
+_TIMEOUT_AT_ARG = 4
+_RESPONDER_USER_IDS_ARG = 5
+_RESPONDER_GROUP_IDS_ARG = 6
+_LOOP_PATH_ARG = 8
+_TEMPORAL_ID_ARG = 9
+_MESSAGE_ARG = 10
+_SUBMIT_LABEL_ARG = 11
+_SUCCESS_MESSAGE_ARG = 12
+_TIMEZONE_ARG = 13
+_CSS_OVERRIDE_ARG = 14
+_NEW_FORM_PROMPT_ARG_COUNT = 15
 
 
 @pytest.fixture(autouse=True)
@@ -279,6 +280,20 @@ class TestPrepareFormPromptArgs:
         assert args[_TIMEZONE_ARG] == "America/New_York"
         assert args[_CSS_OVERRIDE_ARG] == ".form { color: blue; }"
 
+    @pytest.mark.asyncio
+    async def test_missing_submitted_successor_raises(self) -> None:
+        """A form prompt with nothing wired to 'submitted' has no destination for a response."""
+        wf = _make_workflow()
+        graph = _build_form_prompt_graph(with_successor=False)
+        node = ActivityNode("form1", "form_prompt", {}, name="Data Collection")
+
+        mock_execute = AsyncMock(return_value={"user_ids": [], "group_ids": []})
+        with (
+            patch("syntara.workflows.workflow_engine.form_prompt_mixin.workflow.execute_activity", mock_execute),
+            pytest.raises(SafeValueError, match="no submitted successor"),
+        ):
+            await wf._prepare_form_prompt_args(node, graph, node.parameters)
+
 
 class TestExecuteFormPromptNode:
     """Tests for _execute_form_prompt_node method."""
@@ -334,7 +349,7 @@ class TestExecuteFormPromptNode:
             retry_state=None,
         )
         # Mock the cause property to return our timeout error
-        type(activity_error).cause = PropertyMock(return_value=timeout_error)
+        type(activity_error).cause = PropertyMock(return_value=timeout_error)  # type: ignore[method-assign]
 
         mock_execute = AsyncMock(side_effect=activity_error)
         mock_expire = AsyncMock()
@@ -371,7 +386,7 @@ class TestExecuteFormPromptNode:
             retry_state=None,
         )
         # Mock the cause property to return our timeout error
-        type(activity_error).cause = PropertyMock(return_value=timeout_error)
+        type(activity_error).cause = PropertyMock(return_value=timeout_error)  # type: ignore[method-assign]
 
         mock_execute = AsyncMock(side_effect=activity_error)
         mock_expire = AsyncMock()

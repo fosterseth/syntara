@@ -4,7 +4,7 @@ Minimal internal-facing implementation for workflow engine integration.
 AAP-91889 will extend with full filtering/sorting/enrichment and user-facing endpoints.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, status
@@ -78,6 +78,6 @@ async def list_form_prompts(
 async def batch_update_form_prompts(
     request: BatchFormPromptRequest,
     service: Annotated[FormPromptService, Depends(get_form_prompt_service)],
-) -> dict:
+) -> dict[str, Any]:
     """Batch update form prompt statuses."""
     return await service.batch_update_status(request)

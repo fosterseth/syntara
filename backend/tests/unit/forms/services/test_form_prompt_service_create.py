@@ -15,6 +15,11 @@ from syntara.forms.models.api_models import FormPromptCreateRequest
 from syntara.forms.models.form_prompt import FormPrompt
 from syntara.forms.services.form_prompt_service import FormPromptService
 
+# Minimal valid form definition for tests
+_MINIMAL_FORM_DEFINITION = {
+    "fields": [{"value_name": "field1", "type": "text", "label": "Test Field", "required": False}]
+}
+
 
 def _make_service(*, existing_prompt: FormPrompt | None = None) -> tuple[FormPromptService, Mock]:
     """Build FormPromptService with mocked session."""
@@ -47,7 +52,7 @@ class TestFormPromptServiceCreate:
             project_id=proj_id,
             prompt_node_id="form1",
             name="Test Form",
-            form_definition={"fields": []},
+            form_definition=_MINIMAL_FORM_DEFINITION,
         )
 
         result = await service.create(request)
@@ -68,7 +73,7 @@ class TestFormPromptServiceCreate:
             project_id=uuid4(),
             prompt_node_id="form1",
             name="Form",
-            form_definition={},
+            form_definition=_MINIMAL_FORM_DEFINITION,
         )
 
         await service.create(request)
@@ -90,11 +95,11 @@ class TestFormPromptServiceCreate:
             project_id=uuid4(),
             prompt_node_id="form1",
             name="Form",
-            form_definition={},
+            form_definition=_MINIMAL_FORM_DEFINITION,
             loop_iteration_path=[],
         )
 
-        with pytest.raises(FormPromptAlreadyRequestedError, match="already requested"):
+        with pytest.raises(FormPromptAlreadyRequestedError, match="already exists"):
             await service.create(request)
 
     @pytest.mark.asyncio
@@ -107,7 +112,7 @@ class TestFormPromptServiceCreate:
             project_id=uuid4(),
             prompt_node_id="form1",
             name="Form",
-            form_definition={},
+            form_definition=_MINIMAL_FORM_DEFINITION,
         )
 
         await service.create(request)
@@ -125,7 +130,7 @@ class TestFormPromptServiceCreate:
             project_id=uuid4(),
             prompt_node_id="form1",
             name="Form",
-            form_definition={},
+            form_definition=_MINIMAL_FORM_DEFINITION,
             temporal_activity_id="form1_iter_0",
         )
 
@@ -146,7 +151,7 @@ class TestFormPromptServiceCreate:
             project_id=uuid4(),
             prompt_node_id="form1",
             name="Form",
-            form_definition={},
+            form_definition=_MINIMAL_FORM_DEFINITION,
             responder_user_ids=[user1, user2],
         )
 
@@ -166,7 +171,7 @@ class TestFormPromptServiceCreate:
             project_id=uuid4(),
             prompt_node_id="form1",
             name="Form",
-            form_definition={},
+            form_definition=_MINIMAL_FORM_DEFINITION,
             responder_group_ids=[group1],
         )
 
@@ -185,7 +190,7 @@ class TestFormPromptServiceCreate:
             project_id=uuid4(),
             prompt_node_id="form1",
             name="Form",
-            form_definition={},
+            form_definition=_MINIMAL_FORM_DEFINITION,
             loop_iteration_path=[0, 1],
         )
 

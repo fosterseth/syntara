@@ -16,6 +16,7 @@ from temporalio.exceptions import TimeoutError as TemporalTimeoutError
 
 with workflow.unsafe.imports_passed_through():
     from syntara.core.constants import FieldLimits
+    from syntara.core.exceptions import SafeValueError
     from syntara.workflows.workflow_engine.activities.form_prompt_activity import fail_detached_form_prompt_activity
     from syntara.workflows.workflow_engine.constants import DEFAULT_ACTIVITY_TIMEOUT_SECONDS
     from syntara.workflows.workflow_engine.models.workflow_definition import (
@@ -125,13 +126,19 @@ class WorkflowFormPromptMixin:
         Resolves the dangling Temporal activity so it doesn't keep waiting forever.
         """
         activity_id = self._form_prompt_activity_id(node_id)
-        await workflow.execute_local_activity(
-            fail_detached_form_prompt_activity,
-            args=[workflow.info().workflow_id, workflow.info().run_id, activity_id],
-            activity_id=f"__internal__fail_detached_form_prompt_{activity_id}",
-            start_to_close_timeout=timedelta(seconds=DEFAULT_ACTIVITY_TIMEOUT_SECONDS),
-            retry_policy=RetryPolicy(maximum_attempts=1),
-        )
+        try:
+            await workflow.execute_local_activity(
+                fail_detached_form_prompt_activity,
+                args=[workflow.info().workflow_id, workflow.info().run_id, activity_id],
+                activity_id=f"__internal__fail_detached_form_prompt_{activity_id}",
+                start_to_close_timeout=timedelta(seconds=DEFAULT_ACTIVITY_TIMEOUT_SECONDS),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+        except Exception:  # noqa: BLE001
+            workflow.logger.warning(
+                "Failed to fail detached form prompt activity (best-effort): node_id=%s",
+                node_id,
+            )
 
     async def _cancel_form_prompts(self) -> None:
         """Cancel all pending form prompts when the workflow is cancelled."""
@@ -151,6 +158,7 @@ class WorkflowFormPromptMixin:
     async def _prepare_form_prompt_args(
         self,
         node: "ActivityNode",
+        graph: "WorkflowGraph",
         resolved_parameters: dict[str, Any],
     ) -> list[Any]:
         """Build the positional argument list for create_form_prompt_activity.
@@ -175,6 +183,15 @@ class WorkflowFormPromptMixin:
             [14] css_override:         str | None
 
         """
+        # Runtime backstop for the static save-time validator: a form prompt with
+        # nothing wired to "submitted" has no destination for a response.
+        if not graph.get_next_activities_by_port(node.id, "submitted"):
+            msg = (
+                f"Form prompt node '{node.id}' has no submitted successor. "
+                "Form prompt nodes require at least one successor on the 'submitted' output."
+            )
+            raise SafeValueError(msg)
+
         name = node.name or f"Form prompt for {node.id}"
 
         # Resolve responders (reuse the approver resolution activity - it's generic)
@@ -232,6 +249,7 @@ class WorkflowFormPromptMixin:
     async def _execute_form_prompt_node(
         self,
         node: ActivityNode,
+        graph: WorkflowGraph,
         resolved_parameters: dict[str, Any],
     ) -> dict[str, Any]:
         """Execute a form_prompt node and build the resultSchema output.
@@ -247,7 +265,7 @@ class WorkflowFormPromptMixin:
         """
         node_id = node.id
         prompt_activity_id = self._form_prompt_activity_id(node_id)
-        args = await self._prepare_form_prompt_args(node, resolved_parameters)
+        args = await self._prepare_form_prompt_args(node, graph, resolved_parameters)
         window = resolve_response_window(node, self._runtime_settings)
         fallback_behavior = resolved_parameters.get("fallback_behavior", "fail")
 

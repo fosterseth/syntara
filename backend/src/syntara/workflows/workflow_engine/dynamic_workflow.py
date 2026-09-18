@@ -522,6 +522,10 @@ class OrchestratorWorkflow(WorkflowConvergeMixin, WorkflowApprovalMixin, Workflo
             # termination, there's no valid routing destination (submitted requires a response, and
             # fallback ports are disallowed for fallback_behavior="fail").
             workflow.logger.info(f"Form prompt {node_id} timed out with CoF enabled - terminating branch")
+        else:
+            # All other node types: schedule successors normally when CoF is enabled
+            await self._schedule_successors(node_id, graph, pending_tasks)
+            self._cancel_skipped_pending_tasks(pending_tasks)
 
     def _cancel_skipped_pending_tasks(self, pending_tasks: dict[str, asyncio.Task[Any]]) -> None:
         """Cancel pending tasks for nodes that were marked as skipped."""

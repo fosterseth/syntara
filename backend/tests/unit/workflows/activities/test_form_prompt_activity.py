@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from temporalio.testing import CompleteAsyncError
+from temporalio.activity import _CompleteAsyncError as CompleteAsyncError
 
 from syntara.workflows.workflow_engine.activities.form_prompt_activity import (
     FormPromptActivityError,
@@ -45,7 +45,6 @@ class TestCreateFormPromptActivity:
                 prompt_node_id="form1",
                 name="Test Form",
                 form_definition={"fields": []},
-                workflow_context={"workflow_name": "test"},
                 project_id=str(uuid4()),
             )
 
@@ -75,7 +74,6 @@ class TestCreateFormPromptActivity:
                 prompt_node_id="form1",
                 name="Test",
                 form_definition={},
-                workflow_context={},
                 project_id=str(uuid4()),
             )
 
@@ -93,7 +91,6 @@ class TestCreateFormPromptActivity:
                 prompt_node_id="form1",
                 name="Test",
                 form_definition={},
-                workflow_context={},
                 project_id="",  # Empty!
             )
 
@@ -121,7 +118,6 @@ class TestCreateFormPromptActivity:
                 prompt_node_id="form1",
                 name="Test",
                 form_definition={},
-                workflow_context={},
                 project_id=str(uuid4()),
             )
 
@@ -146,7 +142,6 @@ class TestCreateFormPromptActivity:
                 prompt_node_id="form1",
                 name="Test",
                 form_definition={},
-                workflow_context={},
                 project_id=str(uuid4()),
             )
 
@@ -174,7 +169,6 @@ class TestCreateFormPromptActivity:
                 prompt_node_id="form1",
                 name="Test Form",
                 form_definition={"fields": []},
-                workflow_context={"workflow_name": "test"},
                 timeout_at="2024-01-01T00:00:00Z",
                 responder_user_ids=[str(uuid4())],
                 responder_group_ids=[str(uuid4())],
@@ -354,10 +348,12 @@ class TestFailDetachedFormPromptActivity:
 
     async def test_swallows_not_found_rpc_error(self):
         """Swallows RPCError containing 'not found'."""
-        from temporalio.service import RPCError
+        from temporalio.service import RPCError, RPCStatusCode
 
         mock_temporal_client = MagicMock()
-        mock_temporal_client.get_async_activity_handle = MagicMock(side_effect=RPCError("Activity not found", None))
+        mock_temporal_client.get_async_activity_handle = MagicMock(
+            side_effect=RPCError("Activity not found", RPCStatusCode.NOT_FOUND, b"")
+        )
         mock_sync_service = MagicMock()
         mock_sync_service.temporal_client = mock_temporal_client
 
@@ -370,10 +366,12 @@ class TestFailDetachedFormPromptActivity:
 
     async def test_swallows_already_completed_rpc_error(self):
         """Swallows RPCError containing 'already completed'."""
-        from temporalio.service import RPCError
+        from temporalio.service import RPCError, RPCStatusCode
 
         mock_handle = AsyncMock()
-        mock_handle.fail = AsyncMock(side_effect=RPCError("Activity already completed", None))
+        mock_handle.fail = AsyncMock(
+            side_effect=RPCError("Activity already completed", RPCStatusCode.FAILED_PRECONDITION, b"")
+        )
         mock_temporal_client = MagicMock()
         mock_temporal_client.get_async_activity_handle = MagicMock(return_value=mock_handle)
         mock_sync_service = MagicMock()
@@ -388,10 +386,10 @@ class TestFailDetachedFormPromptActivity:
 
     async def test_reraises_unexpected_rpc_error(self):
         """Reraises RPCError that doesn't match known phrases."""
-        from temporalio.service import RPCError
+        from temporalio.service import RPCError, RPCStatusCode
 
         mock_handle = AsyncMock()
-        mock_handle.fail = AsyncMock(side_effect=RPCError("Server error", None))
+        mock_handle.fail = AsyncMock(side_effect=RPCError("Server error", RPCStatusCode.UNKNOWN, b""))
         mock_temporal_client = MagicMock()
         mock_temporal_client.get_async_activity_handle = MagicMock(return_value=mock_handle)
         mock_sync_service = MagicMock()

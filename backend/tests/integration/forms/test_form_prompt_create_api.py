@@ -11,6 +11,11 @@ from httpx import AsyncClient
 
 FORM_PROMPTS_URL = "/api/v1/form_prompts"
 
+# Minimal valid form definition for integration tests
+_MINIMAL_FORM_DEFINITION = {
+    "fields": [{"value_name": "field1", "type": "text", "label": "Test Field", "required": False}]
+}
+
 
 def _form_prompt_payload(
     execution_id: UUID,
@@ -25,7 +30,7 @@ def _form_prompt_payload(
         "project_id": str(project_id),
         "prompt_node_id": prompt_node_id,
         "name": name,
-        "form_definition": form_definition or {"fields": []},
+        "form_definition": form_definition or _MINIMAL_FORM_DEFINITION,
         "loop_iteration_path": [],
     }
 
@@ -50,12 +55,12 @@ class TestFormPromptCreateAPI:
         assert data["status"] == "pending"
 
     async def test_create_form_prompt_with_responders(
-        self, jwt_client: AsyncClient, test_project_id: UUID, test_user_id: UUID
+        self, jwt_client: AsyncClient, test_project_id: UUID, test_user
     ) -> None:
         """Create form_prompt with responder_user_ids stores responders."""
         exec_id = uuid4()
         payload = _form_prompt_payload(exec_id, test_project_id)
-        payload["responder_user_ids"] = [str(test_user_id)]
+        payload["responder_user_ids"] = [str(test_user.id)]
 
         response = await jwt_client.post(FORM_PROMPTS_URL, json=payload)
 
@@ -108,10 +113,10 @@ class TestFormPromptCreateAPI:
         assert list_response.status_code == 200
 
         data = list_response.json()
-        assert "resources" in data
-        assert len(data["resources"]) == 2
+        assert isinstance(data, list)
+        assert len(data) == 2
 
-        prompt_names = {p["name"] for p in data["resources"]}
+        prompt_names = {p["name"] for p in data}
         assert "Form 1" in prompt_names
         assert "Form 2" in prompt_names
 

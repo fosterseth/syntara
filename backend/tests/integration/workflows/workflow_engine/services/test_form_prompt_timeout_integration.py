@@ -1,9 +1,10 @@
 """Integration test for form_prompt node timeout and expiry.
 
 Tests the workflow-level handling of form_prompt node timeout using Temporal's
-time-skipping test environment. Uses a test-friendly form_prompt activity that
-sleeps past the response window (instead of raise_complete_async) because the
-time-skipping test server does not support async activity completion RPCs.
+test environment. Uses a test-friendly form_prompt activity that never returns,
+so Temporal's start_to_close_timeout fires and exercises the expiry path.
+Note that time skipping is paused while an activity runs, so these tests wait
+out the response window in real time.
 
 When the form_prompt activity times out, the workflow behavior depends on
 fallback_behavior:
@@ -20,13 +21,20 @@ from temporalio import activity
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from syntara.workflows.workflow_engine.activities.approver_resolution_activity import resolve_approvers_activity
 from syntara.workflows.workflow_engine.activities.converge import converge
+from syntara.workflows.workflow_engine.activities.form_prompt_activity import fail_detached_form_prompt_activity
 from syntara.workflows.workflow_engine.activities.manual_trigger import manual_trigger
 from syntara.workflows.workflow_engine.activities.runtime_settings_activity import fetch_workflow_runtime_settings
 from syntara.workflows.workflow_engine.dynamic_workflow import OrchestratorWorkflow
 from syntara.workflows.workflow_engine.models.workflow_definition import ActivityName
 
 _expire_calls: list[tuple[str, str | None]] = []
+
+# Form prompts time out at ``response_window + OrchestratorWorkflow._TEMPORAL_MARGIN``
+# seconds of real time (the test server cannot skip time while an activity is running),
+# so allow generous headroom when waiting for the workflow to finish.
+_RESULT_TIMEOUT_S = 90
 
 
 @activity.defn(name=ActivityName.FORM_PROMPT)
@@ -35,7 +43,6 @@ async def _test_form_prompt_activity(
     prompt_node_id: str,
     name: str,
     form_definition: dict[str, Any],
-    workflow_context: dict[str, Any],
     timeout_at: str | None = None,
     responder_user_ids: list[str] | None = None,
     responder_group_ids: list[str] | None = None,
@@ -169,6 +176,7 @@ class TestFormPromptTimeoutIntegration:
             task_queue=task_queue,
             workflows=[OrchestratorWorkflow],
             activities=[
+                resolve_approvers_activity,
                 manual_trigger,
                 _test_form_prompt_activity,
                 _test_expire_form_prompt_activity,
@@ -181,20 +189,18 @@ class TestFormPromptTimeoutIntegration:
                 task_queue=task_queue,
             )
 
-            workflow_def = _create_form_prompt_fail_workflow_yaml()
+            workflow_def = _create_form_prompt_fail_workflow_yaml(response_window=1)
             result = await execution_service.start_workflow(
-                workflow_definition=workflow_def,
-                project_id="00000000-0000-0000-0000-000000000001",
-                trigger_inputs={},
+                workflow_def=workflow_def,
+                workflow_name="form-prompt-test",
+                trigger_node_id="trigger_manual",
             )
 
-            handle = temporal_env.client.get_workflow_handle(result.temporal_workflow_id)
-            await asyncio.sleep(0.1)
-            await temporal_env.sleep(10)
+            handle = temporal_env.client.get_workflow_handle(result.temporal_workflow_id, run_id=result.temporal_run_id)
+            workflow_result = await asyncio.wait_for(handle.result(), timeout=_RESULT_TIMEOUT_S)
 
-            # Workflow should fail due to timeout
-            desc = await handle.describe()
-            assert desc.status.name == "FAILED"
+            # The form_prompt node fails, so the workflow reports a failed execution
+            assert workflow_result["status"] == "failed"
 
             # Expire activity should have been called for form1
             assert len(_expire_calls) == 1
@@ -212,6 +218,7 @@ class TestFormPromptTimeoutIntegration:
             task_queue=task_queue,
             workflows=[OrchestratorWorkflow],
             activities=[
+                resolve_approvers_activity,
                 manual_trigger,
                 _test_form_prompt_activity,
                 _test_expire_form_prompt_activity,
@@ -224,28 +231,26 @@ class TestFormPromptTimeoutIntegration:
                 task_queue=task_queue,
             )
 
-            workflow_def = _create_form_prompt_fallback_workflow_yaml()
+            workflow_def = _create_form_prompt_fallback_workflow_yaml(response_window=1)
             result = await execution_service.start_workflow(
-                workflow_definition=workflow_def,
-                project_id="00000000-0000-0000-0000-000000000001",
-                trigger_inputs={},
+                workflow_def=workflow_def,
+                workflow_name="form-prompt-test",
+                trigger_node_id="trigger_manual",
             )
 
-            handle = temporal_env.client.get_workflow_handle(result.temporal_workflow_id)
-            await asyncio.sleep(0.1)
-            await temporal_env.sleep(10)
+            handle = temporal_env.client.get_workflow_handle(result.temporal_workflow_id, run_id=result.temporal_run_id)
+            wf_result = await asyncio.wait_for(handle.result(), timeout=_RESULT_TIMEOUT_S)
 
             # Workflow should complete successfully via fallback port
-            desc = await handle.describe()
-            assert desc.status.name == "COMPLETED"
+            assert wf_result["status"] == "completed"
 
             # Expire activity should have been called for form1
             assert len(_expire_calls) == 1
             assert _expire_calls[0][1] == "form1"
 
-            # Verify fallback_step executed
-            wf_result = await handle.result()
-            assert wf_result["fallback_step"]["output"]["status"] == "completed"
+            # Verify the fallback branch ran and the submitted branch did not
+            assert "fallback_step" in wf_result["completed_activities"]
+            assert "submitted_step" not in wf_result["completed_activities"]
 
     async def test_converge_with_detached_form_prompt_expires_remaining(
         self, temporal_env: WorkflowEnvironment
@@ -269,13 +274,21 @@ nodes:
     name: Fast Form
     response_window: 1
     fallback_behavior: fallback
-    form_definition: {}
+    form_definition:
+      fields:
+      - value_name: field1
+        type: text
+        label: Test Field
 - id: form_slow
   type: form_prompt
   parameters:
     name: Slow Form
     response_window: 60
-    form_definition: {}
+    form_definition:
+      fields:
+      - value_name: field1
+        type: text
+        label: Test Field
 - id: converge_node
   type: converge
   parameters:
@@ -286,6 +299,11 @@ nodes:
   parameters:
     language: python
     code: "print('done')"
+- id: fast_submitted
+  type: script
+  parameters:
+    language: python
+    code: "print('fast submitted')"
 edges:
 - from: trigger_manual
   to: form_fast
@@ -294,6 +312,9 @@ edges:
 - from: form_fast
   to: converge_node
   from_port: fallback
+- from: form_fast
+  to: fast_submitted
+  from_port: submitted
 - from: form_slow
   to: converge_node
   from_port: submitted
@@ -309,12 +330,15 @@ edges:
             task_queue=task_queue,
             workflows=[OrchestratorWorkflow],
             activities=[
+                resolve_approvers_activity,
                 manual_trigger,
                 _test_form_prompt_activity,
                 _test_expire_form_prompt_activity,
                 _test_script_activity,
                 converge,
                 fetch_workflow_runtime_settings,
+                # Detached form prompts are resolved through this local activity
+                fail_detached_form_prompt_activity,
             ],
         ):
             execution_service = TemporalExecutionService(
@@ -323,18 +347,16 @@ edges:
             )
 
             result = await execution_service.start_workflow(
-                workflow_definition=workflow_def,
-                project_id="00000000-0000-0000-0000-000000000001",
-                trigger_inputs={},
+                workflow_def=workflow_def,
+                workflow_name="form-prompt-test",
+                trigger_node_id="trigger_manual",
             )
 
-            handle = temporal_env.client.get_workflow_handle(result.temporal_workflow_id)
-            await asyncio.sleep(0.1)
-            await temporal_env.sleep(5)
+            handle = temporal_env.client.get_workflow_handle(result.temporal_workflow_id, run_id=result.temporal_run_id)
+            wf_result = await asyncio.wait_for(handle.result(), timeout=_RESULT_TIMEOUT_S)
 
             # Workflow should complete via form_fast fallback
-            desc = await handle.describe()
-            assert desc.status.name == "COMPLETED"
+            assert wf_result["status"] == "completed"
 
             # Both form_fast and the global expire should have been called
             # form_fast times out first (calls expire for form_fast)
@@ -363,14 +385,34 @@ nodes:
   parameters:
     name: Loop Form
     response_window: 1
-    fallback_behavior: fail
-    form_definition: {}
+    fallback_behavior: fallback
+    form_definition:
+      fields:
+      - value_name: field1
+        type: text
+        label: Test Field
+- id: after_form
+  type: script
+  parameters:
+    language: python
+    code: "print('submitted')"
+- id: after_timeout
+  type: script
+  parameters:
+    language: python
+    code: "print('expired')"
 edges:
 - from: trigger_manual
   to: loop_node
 - from: loop_node
   to: form_in_loop
   from_port: iterate
+- from: form_in_loop
+  to: after_form
+  from_port: submitted
+- from: form_in_loop
+  to: after_timeout
+  from_port: fallback
 """
         workflow_def: dict[str, Any] = yaml.safe_load(workflow_yaml)
 
@@ -382,9 +424,11 @@ edges:
             task_queue=task_queue,
             workflows=[OrchestratorWorkflow],
             activities=[
+                resolve_approvers_activity,
                 manual_trigger,
                 _test_form_prompt_activity,
                 _test_expire_form_prompt_activity,
+                _test_script_activity,
                 loop,
                 fetch_workflow_runtime_settings,
             ],
@@ -395,18 +439,16 @@ edges:
             )
 
             result = await execution_service.start_workflow(
-                workflow_definition=workflow_def,
-                project_id="00000000-0000-0000-0000-000000000001",
-                trigger_inputs={},
+                workflow_def=workflow_def,
+                workflow_name="form-prompt-test",
+                trigger_node_id="trigger_manual",
             )
 
-            handle = temporal_env.client.get_workflow_handle(result.temporal_workflow_id)
-            await asyncio.sleep(0.1)
-            await temporal_env.sleep(5)
+            handle = temporal_env.client.get_workflow_handle(result.temporal_workflow_id, run_id=result.temporal_run_id)
+            wf_result = await asyncio.wait_for(handle.result(), timeout=_RESULT_TIMEOUT_S)
 
-            # Both loop iterations should timeout
-            desc = await handle.describe()
-            assert desc.status.name == "FAILED"
+            # Both loop iterations time out and route through the fallback port
+            assert wf_result["status"] == "completed"
 
             # Should have at least 2 expire calls (one per iteration)
             assert len(_expire_calls) >= 2
@@ -427,7 +469,11 @@ nodes:
   type: form_prompt
   parameters:
     name: Test Form
-    form_definition: {}
+    form_definition:
+      fields:
+      - value_name: field1
+        type: text
+        label: Test Field
 edges:
 - from: trigger_manual
   to: form1
@@ -441,6 +487,7 @@ edges:
             task_queue=task_queue,
             workflows=[OrchestratorWorkflow],
             activities=[
+                resolve_approvers_activity,
                 manual_trigger,
                 _test_form_prompt_activity,
                 fetch_workflow_runtime_settings,
@@ -452,14 +499,14 @@ edges:
             )
 
             result = await execution_service.start_workflow(
-                workflow_definition=workflow_def,
-                project_id="00000000-0000-0000-0000-000000000001",
-                trigger_inputs={},
+                workflow_def=workflow_def,
+                workflow_name="form-prompt-test",
+                trigger_node_id="trigger_manual",
             )
 
-            handle = temporal_env.client.get_workflow_handle(result.temporal_workflow_id)
-            await asyncio.sleep(0.1)
+            handle = temporal_env.client.get_workflow_handle(result.temporal_workflow_id, run_id=result.temporal_run_id)
+            wf_result = await asyncio.wait_for(handle.result(), timeout=_RESULT_TIMEOUT_S)
 
             # Workflow should fail during form_prompt arg preparation
-            desc = await handle.describe()
-            assert desc.status.name == "FAILED"
+            assert wf_result["status"] == "failed"
+            assert "submitted successor" in wf_result["failed_activities"]["form1"]
