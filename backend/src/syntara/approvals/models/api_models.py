@@ -7,6 +7,7 @@ components for type-safe API operations.
 import html
 from datetime import datetime
 from enum import Enum
+from typing import Any, ClassVar
 from uuid import UUID
 
 import nh3

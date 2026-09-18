@@ -54,7 +54,6 @@ class FormPromptsApiClient:
     - Batch cancelling form prompts (POST /form_prompts/batch)
 
     Uses 3 retries with exponential backoff for transient failures.
-    Follows ApprovalsApiClient patterns (async context manager, retry logic, dict-based interface).
     """
 
     def __init__(

@@ -36,7 +36,6 @@ from syntara.workflows.workflow_engine.utils.loop_iteration_ids import (
     loop_index_chain,
 )
 from syntara.workflows.workflow_engine.utils.resolved_prompt_text import process_prompt_field
-from syntara.workflows.workflow_engine.utils.step_context import get_previous_step_context
 
 _FORM_PROMPT_MESSAGE_MAX_LENGTH = FieldLimits.DESCRIPTION_MAX_LENGTH
 
@@ -149,21 +148,9 @@ class WorkflowFormPromptMixin:
         except Exception:  # noqa: BLE001
             workflow.logger.warning("Failed to cancel form prompts (best-effort)")
 
-    def _get_previous_step_context(
-        self,
-        node_id: str,
-        graph: "WorkflowGraph",
-    ) -> dict[str, Any] | None:
-        """Build previous_step context for a form prompt request.
-
-        Delegates to the shared utility function.
-        """
-        return get_previous_step_context(node_id, graph, self.skipped_nodes, self.resolver)
-
     async def _prepare_form_prompt_args(
         self,
         node: "ActivityNode",
-        graph: "WorkflowGraph",
         resolved_parameters: dict[str, Any],
     ) -> list[Any]:
         """Build the positional argument list for create_form_prompt_activity.
