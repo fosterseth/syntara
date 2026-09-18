@@ -248,7 +248,7 @@ class WorkflowFormPromptMixin:
         """
         node_id = node.id
         prompt_activity_id = self._form_prompt_activity_id(node_id)
-        args = await self._prepare_form_prompt_args(node, graph, resolved_parameters)
+        args = await self._prepare_form_prompt_args(node, resolved_parameters)
         window = resolve_response_window(node, self._runtime_settings)
         fallback_behavior = resolved_parameters.get("fallback_behavior", "fail")
 
