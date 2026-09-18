@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from syntara.authz.dependencies import PermissionChecker, VisibilityFilter
+from syntara.authz.dependencies import PermissionChecker
 from syntara.core.database.session import get_db
 from syntara.core.syntara_router import SyntaraRouter
 from syntara.forms.models.api_models import (
@@ -21,15 +21,14 @@ from syntara.forms.models.api_models import (
 from syntara.forms.models.form_prompt import FormPrompt
 from syntara.forms.services.form_prompt_service import FormPromptService
 
-router = SyntaraRouter(prefix="/form-prompts", tags=["Form Prompts"])
+router = SyntaraRouter(prefix="/form_prompts", tags=["Form Prompts"])
 
 
 def get_form_prompt_service(
     session: Annotated[AsyncSession, Depends(get_db)],
-    visibility_filter: Annotated[VisibilityFilter, Depends(VisibilityFilter.build)],
 ) -> FormPromptService:
     """Dependency to get FormPromptService instance."""
-    return FormPromptService(session=session, visibility_filter=visibility_filter)
+    return FormPromptService(session=session)
 
 
 # Service-to-service endpoint (Temporal worker creates form prompts).

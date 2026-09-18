@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 import pytest
 from httpx import AsyncClient
 
-FORM_PROMPTS_URL = "/api/v1/form-prompts"
+FORM_PROMPTS_URL = "/api/v1/form_prompts"
 
 
 def _form_prompt_payload(
@@ -122,7 +122,7 @@ class TestFormPromptCreateAPI:
         assert "Form 2" in prompt_names
 
     async def test_batch_update_form_prompt_status(self, jwt_client: AsyncClient, test_project_id: UUID) -> None:
-        """Batch update form_prompt status via /form-prompts/batch endpoint."""
+        """Batch update form_prompt status via /form_prompts/batch endpoint."""
         exec_id = uuid4()
         payload = _form_prompt_payload(exec_id, test_project_id)
 

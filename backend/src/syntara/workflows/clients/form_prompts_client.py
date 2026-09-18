@@ -48,10 +48,10 @@ class FormPromptsApiClient:
     """HTTP client for Forms API used by the workflow component.
 
     Supports:
-    - Creating a new form prompt (POST /form-prompts)
-    - Listing form prompts filtered by execution_id (GET /form-prompts)
-    - Batch expiring form prompts (POST /form-prompts/batch)
-    - Batch cancelling form prompts (POST /form-prompts/batch)
+    - Creating a new form prompt (POST /form_prompts)
+    - Listing form prompts filtered by execution_id (GET /form_prompts)
+    - Batch expiring form prompts (POST /form_prompts/batch)
+    - Batch cancelling form prompts (POST /form_prompts/batch)
 
     Uses 3 retries with exponential backoff for transient failures.
     Follows ApprovalsApiClient patterns (async context manager, retry logic, dict-based interface).
@@ -188,7 +188,7 @@ class FormPromptsApiClient:
         """
 
         async def _do_create() -> dict[str, Any]:
-            response = await self.http_client.post("/form-prompts", json=request_data, timeout=self.timeout)
+            response = await self.http_client.post("/form_prompts", json=request_data, timeout=self.timeout)
             response.raise_for_status()
             data: dict[str, Any] = response.json()
             logger.info(
@@ -219,7 +219,7 @@ class FormPromptsApiClient:
             params["cursor"] = cursor
 
         async def _do_list() -> tuple[list[dict[str, Any]], str | None]:
-            response = await self.http_client.get("/form-prompts", params=params, timeout=self.timeout)
+            response = await self.http_client.get("/form_prompts", params=params, timeout=self.timeout)
             response.raise_for_status()
             data = response.json()
             resources_data: list[dict[str, Any]] = data.get("resources") or []
@@ -289,7 +289,7 @@ class FormPromptsApiClient:
         body = {"updates": updates}
 
         async def _do_batch() -> dict[str, Any]:
-            response = await self.http_client.post("/form-prompts/batch", json=body, timeout=self.timeout)
+            response = await self.http_client.post("/form_prompts/batch", json=body, timeout=self.timeout)
             response.raise_for_status()
             data: dict[str, Any] = response.json()
             logger.info(
@@ -327,7 +327,7 @@ class FormPromptsApiClient:
         body = {"updates": updates}
 
         async def _do_batch() -> dict[str, Any]:
-            response = await self.http_client.post("/form-prompts/batch", json=body, timeout=self.timeout)
+            response = await self.http_client.post("/form_prompts/batch", json=body, timeout=self.timeout)
             response.raise_for_status()
             data: dict[str, Any] = response.json()
             logger.info(

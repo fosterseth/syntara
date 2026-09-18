@@ -71,7 +71,7 @@ def render_prompt_text(
     Runs last so the length cap is applied to the final string. Scrubbing can
     *lengthen* a value — ``[REDACTED]`` is 10 characters and a secret may be as
     short as 4 — so truncating before scrubbing can push the result back over the
-    limit and turn ``POST /approvals`` or ``POST /form-prompts`` into a validation
+    limit and turn ``POST /approvals`` or ``POST /form_prompts`` into a validation
     failure.
 
     Objects that do not fit are dropped rather than stored as a broken JSON

@@ -18,7 +18,7 @@ tags:
     description: Form prompt management for workflow human-in-the-loop gates
 
 paths:
-  /form-prompts:
+  /form_prompts:
     get:
       summary: List form prompts
       description: |-
@@ -106,7 +106,7 @@ paths:
       security:
         - bearerAuth: []
 
-  /form-prompts/batch:
+  /form_prompts/batch:
     post:
       summary: Batch update form prompt statuses
       description: |-

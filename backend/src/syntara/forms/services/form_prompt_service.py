@@ -10,8 +10,6 @@ from uuid import UUID
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from syntara.authz.dependencies import VisibilityFilter
 from syntara.forms.exceptions import FormPromptAlreadyRequestedError
 from syntara.forms.models.api_models import (
     BatchFormPromptRequest,
@@ -37,17 +35,14 @@ class FormPromptService:
     def __init__(
         self,
         session: AsyncSession,
-        visibility_filter: VisibilityFilter,
     ) -> None:
-        """Initialize service with database session and visibility filter.
+        """Initialize service with database session.
 
         Args:
             session: SQLAlchemy async session
-            visibility_filter: Authorization filter for row-level visibility
 
         """
         self.session = session
-        self.visibility_filter = visibility_filter
 
     async def create(self, request: FormPromptCreateRequest) -> FormPrompt:
         """Create a new form prompt.
@@ -143,9 +138,6 @@ class FormPromptService:
         query = select(FormPrompt).where(FormPrompt.execution_id == execution_id)
         if status is not None:
             query = query.where(FormPrompt.status == status)
-
-        # Apply visibility filter for RBAC
-        query = self.visibility_filter.apply(FormPrompt, query)
 
         result = await self.session.execute(query)
         prompts = list(result.scalars().all())

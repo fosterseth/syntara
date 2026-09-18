@@ -28,11 +28,7 @@ def _make_service(*, existing_prompt: FormPrompt | None = None) -> tuple[FormPro
     session.add = Mock()
     session.flush = AsyncMock()
 
-    # Mock visibility filter
-    mock_visibility = Mock()
-    mock_visibility.apply = Mock(side_effect=lambda _model, query: query)
-
-    svc = FormPromptService(session=session, visibility_filter=mock_visibility)
+    svc = FormPromptService(session=session)
     return svc, session
 
 
