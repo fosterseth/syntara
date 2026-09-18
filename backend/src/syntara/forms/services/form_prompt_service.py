@@ -10,6 +10,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from syntara.forms.exceptions import FormPromptAlreadyRequestedError
 from syntara.forms.models.api_models import (
     BatchFormPromptRequest,
@@ -86,7 +87,6 @@ class FormPromptService:
             success_message=request.success_message,
             timezone=request.timezone,
             css_override=request.css_override,
-            # workflow_context is not stored on the FormPrompt model itself
             status=FormPromptStatus.PENDING,
         )
         self.session.add(form_prompt)

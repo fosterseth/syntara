@@ -48,7 +48,6 @@ class TestFormPromptServiceCreate:
             prompt_node_id="form1",
             name="Test Form",
             form_definition={"fields": []},
-            workflow_context={},
         )
 
         result = await service.create(request)
@@ -70,7 +69,6 @@ class TestFormPromptServiceCreate:
             prompt_node_id="form1",
             name="Form",
             form_definition={},
-            workflow_context={},
         )
 
         await service.create(request)
@@ -93,7 +91,6 @@ class TestFormPromptServiceCreate:
             prompt_node_id="form1",
             name="Form",
             form_definition={},
-            workflow_context={},
             loop_iteration_path=[],
         )
 
@@ -111,7 +108,6 @@ class TestFormPromptServiceCreate:
             prompt_node_id="form1",
             name="Form",
             form_definition={},
-            workflow_context={},
         )
 
         await service.create(request)
@@ -130,7 +126,6 @@ class TestFormPromptServiceCreate:
             prompt_node_id="form1",
             name="Form",
             form_definition={},
-            workflow_context={},
             temporal_activity_id="form1_iter_0",
         )
 
@@ -152,7 +147,6 @@ class TestFormPromptServiceCreate:
             prompt_node_id="form1",
             name="Form",
             form_definition={},
-            workflow_context={},
             responder_user_ids=[user1, user2],
         )
 
@@ -173,7 +167,6 @@ class TestFormPromptServiceCreate:
             prompt_node_id="form1",
             name="Form",
             form_definition={},
-            workflow_context={},
             responder_group_ids=[group1],
         )
 
@@ -193,7 +186,6 @@ class TestFormPromptServiceCreate:
             prompt_node_id="form1",
             name="Form",
             form_definition={},
-            workflow_context={},
             loop_iteration_path=[0, 1],
         )
 

@@ -13,7 +13,6 @@ from pydantic import ConfigDict, Field, field_validator
 from sqlmodel import SQLModel
 
 from syntara.core.constants import FieldLimits
-from syntara.core.models.workflow_context import WorkflowContext
 from syntara.forms.models.form_fields import FormDefinition
 
 
@@ -86,7 +85,6 @@ class FormPromptCreateRequest(SQLModel):
     """Request payload for creating a form prompt.
 
     This is an internal schema used by the Workflows component.
-    Minimal internal-facing implementation. AAP-91889 will extend with full filtering/sorting.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)  # type: ignore[assignment]
@@ -94,7 +92,9 @@ class FormPromptCreateRequest(SQLModel):
     execution_id: UUID = Field(..., description="Parent workflow execution ID")
     project_id: UUID = Field(..., description="Project ID (denormalized from execution)")
     prompt_node_id: str = Field(..., description="Canvas node ID from the workflow definition")
-    name: str = Field(..., min_length=1, max_length=255, description="Display name for the form prompt")
+    name: str = Field(
+        ..., min_length=1, max_length=FieldLimits.NAME_MAX_LENGTH, description="Display name for the form prompt"
+    )
     message: str | None = Field(
         default=None,
         max_length=FieldLimits.DESCRIPTION_MAX_LENGTH,
@@ -111,11 +111,18 @@ class FormPromptCreateRequest(SQLModel):
     )
     timeout_at: datetime | None = Field(None, description="When this prompt expires (null = no timeout)")
     form_definition: FormDefinition = Field(..., description="Form schema defining fields to collect")
-    submit_label: str | None = Field(default=None, max_length=64, description="Submit button label")
-    success_message: str | None = Field(default=None, max_length=500, description="Success message after submit")
-    timezone: str | None = Field(default=None, max_length=64, description="IANA timezone for date fields")
-    css_override: str | None = Field(default=None, max_length=10000, description="Custom CSS for form rendering")
-    workflow_context: WorkflowContext = Field(..., description="Workflow execution context")
+    submit_label: str | None = Field(
+        default=None, max_length=FieldLimits.FORM_SUBMIT_LABEL_MAX_LENGTH, description="Submit button label"
+    )
+    success_message: str | None = Field(
+        default=None, max_length=FieldLimits.FORM_SUCCESS_MESSAGE_MAX_LENGTH, description="Success message after submit"
+    )
+    timezone: str | None = Field(
+        default=None, max_length=FieldLimits.FORM_TIMEZONE_MAX_LENGTH, description="IANA timezone for date fields"
+    )
+    css_override: str | None = Field(
+        default=None, max_length=FieldLimits.FORM_CSS_OVERRIDE_MAX_LENGTH, description="Custom CSS for form rendering"
+    )
     # FK validation: UUIDs must exist in users/groups tables (enforced at service layer)
     responder_user_ids: list[UUID] | None = Field(
         None,

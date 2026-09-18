@@ -47,7 +47,6 @@ async def create_form_prompt_activity(
     prompt_node_id: str,
     name: str,
     form_definition: dict[str, Any],
-    workflow_context: dict[str, Any],
     timeout_at: str | None = None,
     responder_user_ids: list[str] | None = None,
     responder_group_ids: list[str] | None = None,
@@ -71,7 +70,6 @@ async def create_form_prompt_activity(
         prompt_node_id: Canvas node ID from the workflow definition.
         name: Display name for the form prompt.
         form_definition: JSON Schema describing the form fields to collect.
-        workflow_context: Context dict (workflow_version_id, workflow_name, inputs, previous_step).
         timeout_at: ISO datetime string when the prompt expires, or None.
         responder_user_ids: List of user UUIDs who can respond (None = any user with permission).
         responder_group_ids: List of group UUIDs whose members can respond.
@@ -109,7 +107,6 @@ async def create_form_prompt_activity(
         "prompt_node_id": prompt_node_id,
         "name": name,
         "form_definition": form_definition,
-        "workflow_context": workflow_context,
         "timeout_at": timeout_at,
         "responder_user_ids": responder_user_ids,
         "responder_group_ids": responder_group_ids,

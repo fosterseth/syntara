@@ -175,38 +175,20 @@ class WorkflowFormPromptMixin:
             [1] prompt_node_id:        str
             [2] name:                  str
             [3] form_definition:       dict[str, Any]
-            [4] workflow_context:      dict[str, Any]
-            [5] timeout_at:            str | None
-            [6] responder_user_ids:    list[str] | None
-            [7] responder_group_ids:   list[str] | None
-            [8] project_id:            str
-            [9] loop_iteration_path:   list[int]
-            [10] temporal_activity_id: str
-            [11] message:              str | None
-            [12] submit_label:         str | None
-            [13] success_message:      str | None
-            [14] timezone:             str | None
-            [15] css_override:         str | None
+            [4] timeout_at:            str | None
+            [5] responder_user_ids:    list[str] | None
+            [6] responder_group_ids:   list[str] | None
+            [7] project_id:            str
+            [8] loop_iteration_path:   list[int]
+            [9] temporal_activity_id: str
+            [10] message:              str | None
+            [11] submit_label:         str | None
+            [12] success_message:      str | None
+            [13] timezone:             str | None
+            [14] css_override:         str | None
 
         """
         name = node.name or f"Form prompt for {node.id}"
-
-        # Build previous step context
-        previous_step = self._get_previous_step_context(node.id, graph)
-
-        # Build workflow context
-        wf_ctx = (
-            self.resolver.get_namespace("workflow_context") if self.resolver.has_namespace("workflow_context") else {}
-        )
-        execution_ns = wf_ctx.get("execution", {}) if isinstance(wf_ctx, dict) else {}
-        workflow_ns = wf_ctx.get("workflow", {}) if isinstance(wf_ctx, dict) else {}
-        workflow_context = {
-            "workflow_id": workflow_ns.get("id") or execution_ns.get("workflow_version_id", "unknown"),
-            "workflow_version": workflow_ns.get("version"),
-            "workflow_name": graph.metadata.get("name") or "Unknown",
-            "inputs": self.resolver.namespaces.get("trigger", {}),
-            "previous_step": previous_step,
-        }
 
         # Resolve responders (reuse the approver resolution activity - it's generic)
         responder_users = resolved_parameters.get("responder_users") or []
@@ -247,7 +229,6 @@ class WorkflowFormPromptMixin:
             node.id,
             name,
             form_definition,
-            workflow_context,
             timeout_at,
             responder_user_ids,
             responder_group_ids,

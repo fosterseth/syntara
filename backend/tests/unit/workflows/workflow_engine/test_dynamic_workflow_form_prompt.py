@@ -189,24 +189,6 @@ class TestPrepareFormPromptArgs:
         assert call_kwargs["args"] == [["alice", "bob"], ["data-team"]]
 
     @pytest.mark.asyncio
-    async def test_workflow_context_populated(self) -> None:
-        """Workflow context includes name and trigger inputs."""
-        resolver = NamespaceResolver()
-        resolver.set_namespace("trigger", {"target": "prod", "version": "2.0"})
-        wf = _make_workflow(resolver=resolver)
-        graph = _build_form_prompt_graph()
-        node = ActivityNode("form1", "form_prompt", {}, name="Form")
-
-        mock_execute = AsyncMock(return_value={"user_ids": [], "group_ids": []})
-        with patch("syntara.workflows.workflow_engine.form_prompt_mixin.workflow.execute_activity", mock_execute):
-            args = await wf._prepare_form_prompt_args(node, graph, node.parameters)
-
-        ctx = args[4]
-        assert ctx["workflow_name"] == "Data Pipeline"
-        assert ctx["inputs"] == {"target": "prod", "version": "2.0"}
-        assert ctx["workflow_id"] is not None
-
-    @pytest.mark.asyncio
     async def test_timeout_at_computed_from_response_window(self) -> None:
         """timeout_at is ISO string set to now + response_window when configured."""
         wf = _make_workflow()

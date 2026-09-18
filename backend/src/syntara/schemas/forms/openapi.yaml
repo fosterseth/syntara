@@ -733,7 +733,6 @@ components:
         - prompt_node_id
         - name
         - form_definition
-        - workflow_context
       properties:
         execution_id:
           type: string
@@ -790,9 +789,6 @@ components:
             - type: string
               maxLength: 10000
             - type: "null"
-        workflow_context:
-          type: object
-          description: WorkflowContext object
         responder_user_ids:
           anyOf:
             - type: array

@@ -38,7 +38,6 @@ from syntara.workflows.workflow_engine.utils.loop_iteration_ids import (
     use_unique_loop_iteration_ids,
 )
 from syntara.workflows.workflow_engine.utils.resolved_prompt_text import process_prompt_field
-from syntara.workflows.workflow_engine.utils.step_context import get_previous_step_context
 
 _APPROVAL_COMMENTS_MAX_LENGTH = FieldLimits.DESCRIPTION_MAX_LENGTH
 _APPROVAL_PROMPT_PATCH = "persist-approval-prompt"
@@ -200,7 +199,24 @@ class WorkflowApprovalMixin:
         Finds the predecessor node in the graph and returns its ID, name, type,
         and output for inclusion in the approval's workflow_context.
         """
-        return get_previous_step_context(node_id, graph, self.skipped_nodes, self.resolver)
+        predecessors = graph.get_predecessors(node_id)
+        if not predecessors:
+            return None
+        prev_id = predecessors[0]
+        prev_node = graph.get_node(prev_id)
+        if prev_id in self.skipped_nodes:
+            previous_output: dict[str, Any] | None = {"status": "skipped"}
+        else:
+            try:
+                previous_output = self.resolver.get_namespace(prev_id)
+            except KeyError:
+                previous_output = None
+        return {
+            "id": prev_node.id,
+            "name": prev_node.name or prev_node.id,
+            "type": prev_node.type,
+            "output": previous_output,
+        }
 
     async def _prepare_approval_args(
         self,

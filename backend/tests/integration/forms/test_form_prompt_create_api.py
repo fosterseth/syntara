@@ -26,12 +26,6 @@ def _form_prompt_payload(
         "prompt_node_id": prompt_node_id,
         "name": name,
         "form_definition": form_definition or {"fields": []},
-        "workflow_context": {
-            "workflow_id": str(uuid4()),
-            "workflow_name": "Test Workflow",
-            "inputs": {},
-            "previous_step": None,
-        },
         "loop_iteration_path": [],
     }
 

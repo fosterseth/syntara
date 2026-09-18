@@ -41,12 +41,6 @@ def create_request_data() -> dict[str, Any]:
         "prompt_node_id": "form1",
         "name": "User Input Form",
         "form_definition": {"fields": []},
-        "workflow_context": {
-            "workflow_id": str(uuid4()),
-            "workflow_name": "Data Collection",
-            "inputs": {"source": "api"},
-            "previous_step": None,
-        },
         "project_id": str(uuid4()),
     }
 
