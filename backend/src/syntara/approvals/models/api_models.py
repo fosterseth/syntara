@@ -7,7 +7,7 @@ components for type-safe API operations.
 import html
 from datetime import datetime
 from enum import Enum
-from typing import Any, ClassVar
+from typing import ClassVar
 from uuid import UUID
 
 import nh3
@@ -15,6 +15,7 @@ from pydantic import AliasChoices, ConfigDict, Field, field_validator
 from sqlmodel import SQLModel
 
 from syntara.core.constants import FieldLimits
+from syntara.core.models.workflow_context import ActivitySummary, PreviousStepContext, WorkflowContext  # noqa: F401
 
 _SANITIZE_MAX_ROUNDS = 10
 _SANITIZE_ERROR = "Decision notes contain deeply nested HTML encoding that cannot be safely sanitized"
@@ -97,57 +98,6 @@ class BatchApprovalDecisionStatus(str, Enum):
     REJECTED = "rejected"
     EXPIRED = "expired"
     CANCELLED = "cancelled"
-
-
-class ActivitySummary(SQLModel):
-    """Activity summary for workflow context.
-
-    Passed through from the workflow engine as-is. Contains at minimum
-    ``id``, ``name``, ``type``, and usually ``config`` with the full
-    activity parameters so approvers can see what the step will do.
-    """
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True, extra="allow")  # type: ignore[assignment]
-
-    id: str = Field(..., description="Activity ID from workflow definition")
-    name: str = Field(..., description="Human-readable activity name")
-    type: str = Field(..., description="Activity type (script, approval, agentic, etc.)")
-
-
-class PreviousStepContext(SQLModel):
-    """Previous Step Context for workflow execution.
-
-    The activity that immediately preceded this approval node, including its output.
-    Null if the approval node is the first activity in the workflow.
-    """
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)  # type: ignore[assignment]
-
-    id: str = Field(..., description="Activity ID from workflow definition")
-    name: str = Field(..., description="Human-readable activity name")
-    type: str = Field(..., description="Activity type (task, approval, parallel, etc.)")
-    output: dict[str, Any] | None = Field(
-        None, description="Output from the activity (structure varies per activity type)"
-    )
-
-
-class WorkflowContext(SQLModel):
-    """Workflow Context for approvers.
-
-    Essential context for approvers to make a decision.
-    Contains workflow identification, inputs, and the output from the immediately
-    preceding activity.
-    """
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)  # type: ignore[assignment]
-
-    workflow_id: UUID | None = Field(None, description="ID of the workflow")
-    workflow_version: int | None = Field(None, description="Integer version number of the workflow version executed")
-    workflow_name: str = Field(..., description="Name of the workflow")
-    inputs: dict[str, Any] = Field(
-        ..., description="Original workflow input parameters (structure varies per workflow)"
-    )
-    previous_step: PreviousStepContext | None = Field(None, description="Previous step context and output")
 
 
 class ApprovalCreateRequest(SQLModel):
