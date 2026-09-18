@@ -176,3 +176,45 @@ class BatchFormPromptRequest(SQLModel):
     updates: list[BatchFormPromptUpdate] = Field(
         ..., min_length=1, max_length=100, description="List of form prompt status updates to apply"
     )
+
+
+class FormPromptSummary(SQLModel):
+    """Minimal form prompt response for internal workflow engine endpoints.
+
+    Contains only the 8 documented fields used by expire/cancel activities
+    and workflow lifecycle management. Does not expose user-submitted form data
+    or rendering configuration fields (those will appear in FormPromptRead for
+    user-facing endpoints in AAP-91889).
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)  # type: ignore[assignment]
+
+    id: UUID = Field(..., description="Form prompt unique identifier")
+    execution_id: UUID = Field(..., description="Parent workflow execution ID")
+    project_id: UUID = Field(..., description="Project ID (denormalized from execution)")
+    prompt_node_id: str = Field(..., description="Canvas node ID from the workflow definition")
+    name: str = Field(..., description="Display name for the form prompt")
+    status: FormPromptStatus = Field(..., description="Current prompt status")
+    loop_iteration_path: list[int] = Field(default_factory=list, description="Enclosing-loop indices, outermost first")
+    temporal_activity_id: str | None = Field(None, description="Temporal activity ID for async completion")
+
+
+class BatchUpdateResult(SQLModel):
+    """Single result within a batch update response."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)  # type: ignore[assignment]
+
+    prompt_id: str = Field(..., description="ID of the form prompt")
+    success: bool = Field(..., description="Whether the update succeeded")
+    message: str | None = Field(None, description="Success message if applicable")
+    error: str | None = Field(None, description="Error message if update failed")
+
+
+class BatchUpdateResponse(SQLModel):
+    """Response payload for batch form prompt updates."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)  # type: ignore[assignment]
+
+    results: list[BatchUpdateResult] = Field(..., description="Individual update results")
+    total_success: int = Field(..., ge=0, description="Count of successful updates")
+    total_failed: int = Field(..., ge=0, description="Count of failed updates")

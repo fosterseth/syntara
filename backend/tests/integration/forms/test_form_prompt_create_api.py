@@ -69,7 +69,7 @@ class TestFormPromptCreateAPI:
         assert data["execution_id"] == str(exec_id)
 
     async def test_create_form_prompt_with_message(self, jwt_client: AsyncClient, test_project_id: UUID) -> None:
-        """Create form_prompt with message field stores message."""
+        """Create form_prompt with message field succeeds (message not in summary response)."""
         exec_id = uuid4()
         payload = _form_prompt_payload(exec_id, test_project_id)
         payload["message"] = "Please fill out this form carefully"
@@ -78,7 +78,9 @@ class TestFormPromptCreateAPI:
 
         assert response.status_code == 201
         data = response.json()
-        assert data["message"] == "Please fill out this form carefully"
+        # FormPromptSummary doesn't include message (only 8 minimal fields)
+        assert "id" in data
+        assert data["execution_id"] == str(exec_id)
 
     async def test_create_duplicate_form_prompt_returns_409(
         self, jwt_client: AsyncClient, test_project_id: UUID
@@ -113,10 +115,10 @@ class TestFormPromptCreateAPI:
         assert list_response.status_code == 200
 
         data = list_response.json()
-        assert isinstance(data, list)
-        assert len(data) == 2
+        assert "resources" in data
+        assert len(data["resources"]) == 2
 
-        prompt_names = {p["name"] for p in data}
+        prompt_names = {p["name"] for p in data["resources"]}
         assert "Form 1" in prompt_names
         assert "Form 2" in prompt_names
 

@@ -4,7 +4,7 @@ Minimal internal-facing implementation for workflow engine integration.
 AAP-91889 will extend with full filtering/sorting/enrichment and user-facing endpoints.
 """
 
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, status
@@ -15,10 +15,12 @@ from syntara.core.database.session import get_db
 from syntara.core.syntara_router import SyntaraRouter
 from syntara.forms.models.api_models import (
     BatchFormPromptRequest,
+    BatchUpdateResponse,
     FormPromptCreateRequest,
     FormPromptStatus,
+    FormPromptSummary,
 )
-from syntara.forms.models.form_prompt import FormPrompt
+from syntara.forms.models.form_prompt import FormPromptListResponse
 from syntara.forms.services.form_prompt_service import FormPromptService
 
 router = SyntaraRouter(prefix="/form_prompts", tags=["Form Prompts"])
@@ -41,11 +43,12 @@ def get_form_prompt_service(
     operation_id="create_form_prompt",
     summary="Create form prompt",
     description="Create a new form prompt. Internal service-to-service endpoint for workflow engine.",
+    response_description="Form prompt created",
 )
 async def create_form_prompt(
     request: FormPromptCreateRequest,
     service: Annotated[FormPromptService, Depends(get_form_prompt_service)],
-) -> FormPrompt:
+) -> FormPromptSummary:
     """Create a new form prompt."""
     return await service.create(request)
 
@@ -57,12 +60,13 @@ async def create_form_prompt(
     operation_id="list_form_prompts",
     summary="List form prompts",
     description="List form prompts filtered by execution ID. Internal endpoint for expire/cancel activities.",
+    response_description="List of form prompts",
 )
 async def list_form_prompts(
     execution_id: UUID,
     service: Annotated[FormPromptService, Depends(get_form_prompt_service)],
     status: FormPromptStatus | None = None,
-) -> list[FormPrompt]:
+) -> FormPromptListResponse:
     """List form prompts for an execution."""
     return await service.list_by_execution(execution_id=execution_id, status=status)
 
@@ -74,10 +78,11 @@ async def list_form_prompts(
     operation_id="batch_update_form_prompts",
     summary="Batch update form prompt statuses",
     description="Batch update form prompt statuses. Internal endpoint for expire/cancel activities.",
+    response_description="Batch update results",
 )
 async def batch_update_form_prompts(
     request: BatchFormPromptRequest,
     service: Annotated[FormPromptService, Depends(get_form_prompt_service)],
-) -> dict[str, Any]:
+) -> BatchUpdateResponse:
     """Batch update form prompt statuses."""
     return await service.batch_update_status(request)

@@ -4,7 +4,6 @@ Minimal internal-facing implementation for workflow engine integration.
 AAP-91889 will extend with full filtering/sorting/enrichment.
 """
 
-from typing import Any
 from uuid import UUID
 
 import structlog
@@ -14,11 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from syntara.forms.exceptions import FormPromptAlreadyRequestedError
 from syntara.forms.models.api_models import (
     BatchFormPromptRequest,
+    BatchUpdateResponse,
+    BatchUpdateResult,
     FormPromptCreateRequest,
     FormPromptStatus,
+    FormPromptSummary,
     can_transition,
 )
-from syntara.forms.models.form_prompt import FormPrompt
+from syntara.forms.models.form_prompt import FormPrompt, FormPromptListResponse
 from syntara.forms.models.form_prompt_responders import FormPromptResponderGroup, FormPromptResponderUser
 
 logger = structlog.stdlib.get_logger(__name__)
@@ -45,14 +47,14 @@ class FormPromptService:
         """
         self.session = session
 
-    async def create(self, request: FormPromptCreateRequest) -> FormPrompt:
+    async def create(self, request: FormPromptCreateRequest) -> FormPromptSummary:
         """Create a new form prompt.
 
         Args:
             request: Form prompt creation request
 
         Returns:
-            Created form prompt
+            Created form prompt summary
 
         Raises:
             FormPromptAlreadyRequestedError: If a prompt for this (execution_id, prompt_node_id,
@@ -118,13 +120,14 @@ class FormPromptService:
             prompt_node_id=request.prompt_node_id,
         )
 
-        return form_prompt
+        # Return summary for internal workflow engine endpoints
+        return FormPromptSummary.model_validate(form_prompt)
 
     async def list_by_execution(
         self,
         execution_id: UUID,
         status: FormPromptStatus | None = None,
-    ) -> list[FormPrompt]:
+    ) -> FormPromptListResponse:
         """Fetch form prompts for an execution, with optional status filter.
 
         Args:
@@ -132,7 +135,7 @@ class FormPromptService:
             status: Optional status filter
 
         Returns:
-            List of form prompts visible to the current user
+            Paginated response with form prompt summaries
 
         """
         query = select(FormPrompt).where(FormPrompt.execution_id == execution_id)  # type: ignore[arg-type]
@@ -149,9 +152,11 @@ class FormPromptService:
             count=len(prompts),
         )
 
-        return prompts
+        # Convert to summaries and wrap in paginated response
+        summaries = [FormPromptSummary.model_validate(p) for p in prompts]
+        return FormPromptListResponse(resources=summaries, next=None, prev=None)
 
-    async def batch_update_status(self, request: BatchFormPromptRequest) -> dict[str, Any]:
+    async def batch_update_status(self, request: BatchFormPromptRequest) -> BatchUpdateResponse:
         """Batch update form prompt statuses.
 
         Enforces state transition rules via can_transition().
@@ -161,10 +166,10 @@ class FormPromptService:
             request: Batch update request
 
         Returns:
-            Dict with results, total_success, total_failed
+            Typed batch update response with results and counts
 
         """
-        results = []
+        results: list[BatchUpdateResult] = []
         success_count = 0
         failed_count = 0
 
@@ -173,11 +178,11 @@ class FormPromptService:
                 prompt = await self.session.get(FormPrompt, update.prompt_id)
                 if prompt is None:
                     results.append(
-                        {
-                            "prompt_id": str(update.prompt_id),
-                            "success": False,
-                            "error": "Form prompt not found",
-                        }
+                        BatchUpdateResult(
+                            prompt_id=str(update.prompt_id),
+                            success=False,
+                            error="Form prompt not found",
+                        )
                     )
                     failed_count += 1
                     continue
@@ -190,20 +195,20 @@ class FormPromptService:
                     # Idempotent: if already at target status, treat as success
                     if current_status == target_status:
                         results.append(
-                            {
-                                "prompt_id": str(update.prompt_id),
-                                "success": True,
-                                "message": f"Already {target_status.value}",
-                            }
+                            BatchUpdateResult(
+                                prompt_id=str(update.prompt_id),
+                                success=True,
+                                message=f"Already {target_status.value}",
+                            )
                         )
                         success_count += 1
                     else:
                         results.append(
-                            {
-                                "prompt_id": str(update.prompt_id),
-                                "success": False,
-                                "error": f"Cannot transition from {current_status.value} to {target_status.value}",
-                            }
+                            BatchUpdateResult(
+                                prompt_id=str(update.prompt_id),
+                                success=False,
+                                error=f"Cannot transition from {current_status.value} to {target_status.value}",
+                            )
                         )
                         failed_count += 1
                     continue
@@ -212,10 +217,10 @@ class FormPromptService:
                 prompt.status = target_status
                 self.session.add(prompt)
                 results.append(
-                    {
-                        "prompt_id": str(update.prompt_id),
-                        "success": True,
-                    }
+                    BatchUpdateResult(
+                        prompt_id=str(update.prompt_id),
+                        success=True,
+                    )
                 )
                 success_count += 1
 
@@ -226,11 +231,11 @@ class FormPromptService:
                     error=str(e),
                 )
                 results.append(
-                    {
-                        "prompt_id": str(update.prompt_id),
-                        "success": False,
-                        "error": str(e),
-                    }
+                    BatchUpdateResult(
+                        prompt_id=str(update.prompt_id),
+                        success=False,
+                        error=str(e),
+                    )
                 )
                 failed_count += 1
 
@@ -243,11 +248,11 @@ class FormPromptService:
             failed=failed_count,
         )
 
-        return {
-            "results": results,
-            "total_success": success_count,
-            "total_failed": failed_count,
-        }
+        return BatchUpdateResponse(
+            results=results,
+            total_success=success_count,
+            total_failed=failed_count,
+        )
 
     async def _get_form_prompt(
         self,
