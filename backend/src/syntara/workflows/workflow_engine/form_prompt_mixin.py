@@ -232,7 +232,6 @@ class WorkflowFormPromptMixin:
     async def _execute_form_prompt_node(
         self,
         node: ActivityNode,
-        graph: WorkflowGraph,
         resolved_parameters: dict[str, Any],
     ) -> dict[str, Any]:
         """Execute a form_prompt node and build the resultSchema output.
