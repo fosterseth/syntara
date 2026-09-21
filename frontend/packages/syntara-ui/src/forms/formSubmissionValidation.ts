@@ -1,5 +1,7 @@
+import type { FormDefinition, FormField } from '@syntara/contracts'
+
 import { FormFieldTypeEnum } from './formFieldTypeEnum'
-import type { FormDefinition, FormField, FormSubmissionData, FormSubmissionInput } from './formTypes'
+import type { FormSubmissionData, FormSubmissionInput } from './formTypes'
 import {
   FormDataValidationError,
   FormDefinitionValidationError,
@@ -25,35 +27,51 @@ function emailSegmentIsValid(segment: string): boolean {
   if (segment.length === 0) {
     return false
   }
-  for (let index = 0; index < segment.length; index += 1) {
-    const code = segment.charCodeAt(index)
-    if (code <= 32 || code === 127 || code === 64) {
+  for (const char of segment) {
+    if (char === '@') {
+      return false
+    }
+    const code = char.codePointAt(0)
+    if (code === undefined || code <= 32 || code === 127) {
       return false
     }
   }
   return true
 }
 
+function isValidEmailDomain(domain: string): boolean {
+  return domain.includes('.') && !domain.startsWith('.') && !domain.endsWith('.')
+}
+
 function isValidEmailShape(local: string, domain: string): boolean {
   if (!emailSegmentIsValid(local) || !emailSegmentIsValid(domain)) {
     return false
   }
-  const dot = domain.indexOf('.')
-  return dot > 0 && dot < domain.length - 1
+  return isValidEmailDomain(domain)
+}
+
+function splitEmailAtLastAt(value: string): { local: string; domain: string } | null {
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    if (value.codePointAt(index) === 64) {
+      if (index <= 0 || index === value.length - 1) {
+        return null
+      }
+      return {
+        local: value.slice(0, index),
+        domain: value.slice(index + 1).toLowerCase(),
+      }
+    }
+  }
+  return null
 }
 
 function coerceEmail(raw: unknown): string {
   const value = coerceString(raw)
-  const at = value.lastIndexOf('@')
-  if (at <= 0 || at === value.length - 1) {
+  const parts = splitEmailAtLastAt(value)
+  if (parts === null || !isValidEmailShape(parts.local, parts.domain)) {
     throw new Error('Must be a valid email address')
   }
-  const local = value.slice(0, at)
-  const domain = value.slice(at + 1).toLowerCase()
-  if (!isValidEmailShape(local, domain)) {
-    throw new Error('Must be a valid email address')
-  }
-  return `${local}@${domain}`
+  return `${parts.local}@${parts.domain}`
 }
 
 function coerceNumber(raw: unknown): number {
@@ -173,30 +191,36 @@ function isStaticOptions(field: FormField): field is SelectFormFieldWithStaticOp
 }
 
 function checkStaticOptionMembership(
-  field: FormField,
+  field: SelectFormFieldWithStaticOptions,
   coerced: FormSubmissionData[string]
 ): FormFieldValidationError | null {
-  if (!isStaticOptions(field)) {
-    return null
-  }
-
   const validValues = new Set(field.options.values.map((option) => option.value))
 
   if (field.type === FormFieldTypeEnum.MULTI_SELECT) {
-    const values = coerced as Array<string | number | boolean>
-    const invalid = values.filter((value) => !validValues.has(value))
-    if (invalid.length > 0) {
+    if (!Array.isArray(coerced)) {
+      return fieldError(field, 'type', 'Must be a list')
+    }
+    let invalidCount = 0
+    for (const value of coerced) {
+      if (!validValues.has(value)) {
+        invalidCount += 1
+      }
+    }
+    if (invalidCount > 0) {
       return {
         field: field.value_name,
         label: field.label,
         code: 'not_in_options',
-        message: `Invalid selection(s): ${invalid.length} value(s) not in option list`,
+        message: `Invalid selection(s): ${invalidCount} value(s) not in option list`,
       }
     }
     return null
   }
 
-  if (!validValues.has(coerced as string | number | boolean)) {
+  if (Array.isArray(coerced) || !validValues.has(coerced)) {
+    if (Array.isArray(coerced)) {
+      return fieldError(field, 'type', 'Dropdown expects a single value, not a list')
+    }
     return {
       field: field.value_name,
       label: field.label,
@@ -261,7 +285,7 @@ function validateFieldSubmission(field: FormField, submitted: FormSubmissionInpu
     return { status: 'invalid', error: fieldError(field, 'must_be_checked', 'This checkbox must be checked') }
   }
 
-  const optionError = checkStaticOptionMembership(field, coerced)
+  const optionError = isStaticOptions(field) ? checkStaticOptionMembership(field, coerced) : null
   if (optionError) {
     return { status: 'invalid', error: optionError }
   }

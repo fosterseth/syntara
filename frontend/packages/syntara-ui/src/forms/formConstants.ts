@@ -19,11 +19,13 @@ export function isValidFormFieldValueName(value: string): boolean {
   if (value.length < 1 || value.length > FORM_FIELD_VALUE_NAME_MAX_LENGTH) {
     return false
   }
-  if (!isFieldNameStartChar(value.charCodeAt(0))) {
+  const first = value.codePointAt(0)
+  if (first === undefined || !isFieldNameStartChar(first)) {
     return false
   }
   for (let index = 1; index < value.length; index += 1) {
-    if (!isFieldNameChar(value.charCodeAt(index))) {
+    const code = value.codePointAt(index)
+    if (code === undefined || !isFieldNameChar(code)) {
       return false
     }
   }

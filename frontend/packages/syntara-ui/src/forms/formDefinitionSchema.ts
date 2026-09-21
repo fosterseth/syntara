@@ -1,3 +1,4 @@
+import type { FormDefinition } from '@syntara/contracts'
 import { z } from 'zod'
 
 import {
@@ -10,7 +11,6 @@ import {
   isValidFormFieldValueName,
 } from './formConstants'
 import { FormFieldTypeEnum } from './formFieldTypeEnum'
-import type { FormDefinition } from './formTypes'
 import { FormDefinitionValidationError, type FormFieldValidationError } from './formValidationErrors'
 
 const fieldValueNameSchema = z
@@ -124,6 +124,69 @@ function findDuplicateFieldNames(fields: ReadonlyArray<{ value_name: string }>):
   return duplicateNames.slice().sort((a, b) => a.localeCompare(b, 'en'))
 }
 
+function validateMultiSelectDefault(
+  field: Extract<z.infer<typeof formFieldSchema>, { type: typeof FormFieldTypeEnum.MULTI_SELECT }>,
+  validValues: Set<string | number | boolean>,
+  index: number,
+  ctx: z.RefinementCtx
+): void {
+  if (field.default == null) {
+    return
+  }
+  const invalidDefaults: typeof field.default = []
+  for (const value of field.default) {
+    if (!validValues.has(value)) {
+      invalidDefaults.push(value)
+    }
+  }
+  if (invalidDefaults.length === 0) {
+    return
+  }
+  ctx.addIssue({
+    code: 'custom',
+    message: `Field '${field.value_name}': default values ${JSON.stringify(invalidDefaults)} are not in the option list`,
+    path: ['fields', index, 'default'],
+  })
+}
+
+function validateDropdownDefault(
+  field: Extract<z.infer<typeof formFieldSchema>, { type: typeof FormFieldTypeEnum.DROPDOWN }>,
+  validValues: Set<string | number | boolean>,
+  index: number,
+  ctx: z.RefinementCtx
+): void {
+  if (field.default == null || validValues.has(field.default)) {
+    return
+  }
+  ctx.addIssue({
+    code: 'custom',
+    message: `Field '${field.value_name}': default value '${String(field.default)}' is not in the option list`,
+    path: ['fields', index, 'default'],
+  })
+}
+
+function validateStaticOptionDefaults(
+  fields: ReadonlyArray<z.infer<typeof formFieldSchema>>,
+  ctx: z.RefinementCtx
+): void {
+  for (const [index, field] of fields.entries()) {
+    if (
+      (field.type !== FormFieldTypeEnum.DROPDOWN && field.type !== FormFieldTypeEnum.MULTI_SELECT) ||
+      field.options.source !== 'static'
+    ) {
+      continue
+    }
+
+    const validValues = new Set(field.options.values.map((option) => option.value))
+
+    if (field.type === FormFieldTypeEnum.MULTI_SELECT) {
+      validateMultiSelectDefault(field, validValues, index, ctx)
+    } else {
+      validateDropdownDefault(field, validValues, index, ctx)
+    }
+  }
+}
+
 export const formDefinitionSchema = z
   .object({
     fields: z.array(formFieldSchema).min(FORM_DEFINITION_MIN_FIELDS).max(FORM_DEFINITION_MAX_FIELDS),
@@ -138,34 +201,7 @@ export const formDefinitionSchema = z
       })
     }
 
-    for (const [index, field] of definition.fields.entries()) {
-      if (
-        (field.type === FormFieldTypeEnum.DROPDOWN || field.type === FormFieldTypeEnum.MULTI_SELECT) &&
-        field.options.source === 'static'
-      ) {
-        const validValues = new Set(field.options.values.map((option) => option.value))
-        if (field.type === FormFieldTypeEnum.MULTI_SELECT && field.default != null) {
-          const invalid = field.default.filter((value) => !validValues.has(value))
-          if (invalid.length > 0) {
-            ctx.addIssue({
-              code: 'custom',
-              message: `Field '${field.value_name}': default values ${JSON.stringify(invalid)} are not in the option list`,
-              path: ['fields', index, 'default'],
-            })
-          }
-        } else if (
-          field.type === FormFieldTypeEnum.DROPDOWN &&
-          field.default != null &&
-          !validValues.has(field.default)
-        ) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `Field '${field.value_name}': default value '${String(field.default)}' is not in the option list`,
-            path: ['fields', index, 'default'],
-          })
-        }
-      }
-    }
+    validateStaticOptionDefaults(definition.fields, ctx)
   })
 
 function zodPathToField(path: ReadonlyArray<PropertyKey>): string {

@@ -28,7 +28,7 @@ export type {
   FormSubmissionInput,
   StaticOptionsSource,
 } from './formTypes'
-export type { FormDefinition, FormField, FormPromptConfig } from './formTypes'
+export type { FormDefinition, FormField, FormPromptConfig } from '@syntara/contracts'
 export {
   FormDataValidationError,
   FormDefinitionValidationError,
