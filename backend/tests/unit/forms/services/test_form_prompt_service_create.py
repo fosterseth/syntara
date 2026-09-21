@@ -5,7 +5,7 @@ duplicate detection, and database operations.
 """
 
 from unittest.mock import AsyncMock, Mock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -21,14 +21,27 @@ _MINIMAL_FORM_DEFINITION = {
 }
 
 
-def _make_service(*, existing_prompt: FormPrompt | None = None) -> tuple[FormPromptService, Mock]:
-    """Build FormPromptService with mocked session."""
+def _make_service(
+    *, existing_prompt: FormPrompt | None = None, execution_project_id: UUID | None = None
+) -> tuple[FormPromptService, Mock]:
+    """Build FormPromptService with mocked session.
+
+    Args:
+        existing_prompt: Existing prompt for duplicate check (None = no duplicate)
+        execution_project_id: Project ID to return for execution lookup (uses a random UUID if not provided)
+
+    """
     session = Mock(spec=AsyncSession)
 
     # Mock query result for duplicate check
     mock_result = Mock()
     mock_result.scalar_one_or_none = Mock(return_value=existing_prompt)
     session.execute = AsyncMock(return_value=mock_result)
+
+    # Mock session.get for execution lookup - return a mock execution
+    mock_execution = Mock()
+    mock_execution.project_id = execution_project_id or uuid4()
+    session.get = AsyncMock(return_value=mock_execution)
 
     session.add = Mock()
     session.flush = AsyncMock()
@@ -43,16 +56,17 @@ class TestFormPromptServiceCreate:
     @pytest.mark.asyncio
     async def test_success_returns_form_prompt(self) -> None:
         """Successful creation returns FormPrompt with correct fields."""
-        service, _session = _make_service(existing_prompt=None)
-
         exec_id = uuid4()
         proj_id = uuid4()
+        service, _session = _make_service(existing_prompt=None, execution_project_id=proj_id)
+
         request = FormPromptCreateRequest(
             execution_id=exec_id,
             project_id=proj_id,
             prompt_node_id="form1",
             name="Test Form",
             form_definition=_MINIMAL_FORM_DEFINITION,
+            temporal_activity_id="form1",
         )
 
         result = await service.create(request)
@@ -66,14 +80,16 @@ class TestFormPromptServiceCreate:
     @pytest.mark.asyncio
     async def test_success_adds_to_session(self) -> None:
         """Session.add is called with the new FormPrompt."""
-        service, session = _make_service(existing_prompt=None)
+        proj_id = uuid4()
+        service, session = _make_service(existing_prompt=None, execution_project_id=proj_id)
 
         request = FormPromptCreateRequest(
             execution_id=uuid4(),
-            project_id=uuid4(),
+            project_id=proj_id,
             prompt_node_id="form1",
             name="Form",
             form_definition=_MINIMAL_FORM_DEFINITION,
+            temporal_activity_id="form1",
         )
 
         await service.create(request)
@@ -97,37 +113,21 @@ class TestFormPromptServiceCreate:
             name="Form",
             form_definition=_MINIMAL_FORM_DEFINITION,
             loop_iteration_path=[],
+            temporal_activity_id="form1",
         )
 
         with pytest.raises(FormPromptAlreadyRequestedError, match="already exists"):
             await service.create(request)
 
     @pytest.mark.asyncio
-    async def test_temporal_activity_id_defaults_to_prompt_node_id(self) -> None:
-        """temporal_activity_id defaults to prompt_node_id when not provided."""
-        service, session = _make_service(existing_prompt=None)
-
-        request = FormPromptCreateRequest(
-            execution_id=uuid4(),
-            project_id=uuid4(),
-            prompt_node_id="form1",
-            name="Form",
-            form_definition=_MINIMAL_FORM_DEFINITION,
-        )
-
-        await service.create(request)
-
-        added = session.add.call_args[0][0]
-        assert added.temporal_activity_id == "form1"
-
-    @pytest.mark.asyncio
     async def test_temporal_activity_id_uses_provided_value(self) -> None:
         """temporal_activity_id is set from request when provided."""
-        service, session = _make_service(existing_prompt=None)
+        proj_id = uuid4()
+        service, session = _make_service(existing_prompt=None, execution_project_id=proj_id)
 
         request = FormPromptCreateRequest(
             execution_id=uuid4(),
-            project_id=uuid4(),
+            project_id=proj_id,
             prompt_node_id="form1",
             name="Form",
             form_definition=_MINIMAL_FORM_DEFINITION,
@@ -142,17 +142,19 @@ class TestFormPromptServiceCreate:
     @pytest.mark.asyncio
     async def test_responder_users_creates_junction_rows(self) -> None:
         """responder_user_ids creates FormPromptResponderUser junctions."""
-        service, session = _make_service(existing_prompt=None)
+        proj_id = uuid4()
+        service, session = _make_service(existing_prompt=None, execution_project_id=proj_id)
 
         user1 = uuid4()
         user2 = uuid4()
         request = FormPromptCreateRequest(
             execution_id=uuid4(),
-            project_id=uuid4(),
+            project_id=proj_id,
             prompt_node_id="form1",
             name="Form",
             form_definition=_MINIMAL_FORM_DEFINITION,
             responder_user_ids=[user1, user2],
+            temporal_activity_id="form1",
         )
 
         await service.create(request)
@@ -163,16 +165,18 @@ class TestFormPromptServiceCreate:
     @pytest.mark.asyncio
     async def test_responder_groups_creates_junction_rows(self) -> None:
         """responder_group_ids creates FormPromptResponderGroup junctions."""
-        service, session = _make_service(existing_prompt=None)
+        proj_id = uuid4()
+        service, session = _make_service(existing_prompt=None, execution_project_id=proj_id)
 
         group1 = uuid4()
         request = FormPromptCreateRequest(
             execution_id=uuid4(),
-            project_id=uuid4(),
+            project_id=proj_id,
             prompt_node_id="form1",
             name="Form",
             form_definition=_MINIMAL_FORM_DEFINITION,
             responder_group_ids=[group1],
+            temporal_activity_id="form1",
         )
 
         await service.create(request)
@@ -183,15 +187,17 @@ class TestFormPromptServiceCreate:
     @pytest.mark.asyncio
     async def test_loop_iteration_path_stored_correctly(self) -> None:
         """loop_iteration_path is stored in the FormPrompt."""
-        service, session = _make_service(existing_prompt=None)
+        proj_id = uuid4()
+        service, session = _make_service(existing_prompt=None, execution_project_id=proj_id)
 
         request = FormPromptCreateRequest(
             execution_id=uuid4(),
-            project_id=uuid4(),
+            project_id=proj_id,
             prompt_node_id="form1",
             name="Form",
             form_definition=_MINIMAL_FORM_DEFINITION,
             loop_iteration_path=[0, 1],
+            temporal_activity_id="form1",
         )
 
         await service.create(request)
