@@ -3,9 +3,9 @@ export {
   FORM_DEFINITION_MIN_FIELDS,
   FORM_FIELD_LABEL_MAX_LENGTH,
   FORM_FIELD_VALUE_NAME_MAX_LENGTH,
-  FORM_FIELD_VALUE_NAME_PATTERN,
   FORM_STATIC_OPTION_LABEL_MAX_LENGTH,
   FORM_STATIC_OPTIONS_MAX_LENGTH,
+  isValidFormFieldValueName,
 } from './formConstants'
 export { FormFieldTypeEnum, FORM_FIELD_TYPE_VALUES, type FormFieldType } from './formFieldTypeEnum'
 export {

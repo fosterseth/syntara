@@ -5,9 +5,9 @@ import {
   FORM_DEFINITION_MIN_FIELDS,
   FORM_FIELD_LABEL_MAX_LENGTH,
   FORM_FIELD_VALUE_NAME_MAX_LENGTH,
-  FORM_FIELD_VALUE_NAME_PATTERN,
   FORM_STATIC_OPTION_LABEL_MAX_LENGTH,
   FORM_STATIC_OPTIONS_MAX_LENGTH,
+  isValidFormFieldValueName,
 } from './formConstants'
 import { FormFieldTypeEnum } from './formFieldTypeEnum'
 import type { FormDefinition } from './formTypes'
@@ -17,7 +17,7 @@ const fieldValueNameSchema = z
   .string()
   .min(1)
   .max(FORM_FIELD_VALUE_NAME_MAX_LENGTH)
-  .regex(FORM_FIELD_VALUE_NAME_PATTERN, 'Value name must start with a letter or underscore')
+  .refine(isValidFormFieldValueName, 'Value name must start with a letter or underscore')
 
 const fieldLabelSchema = z.string().min(1).max(FORM_FIELD_LABEL_MAX_LENGTH)
 
@@ -110,18 +110,30 @@ export const formFieldSchema = z.discriminatedUnion('type', [
   multiSelectFieldSchema,
 ])
 
+function findDuplicateFieldNames(fields: ReadonlyArray<{ value_name: string }>): string[] {
+  const duplicateNames: string[] = []
+  const nameCounts = new Map<string, number>()
+  for (const field of fields) {
+    const name = field.value_name
+    const seen = nameCounts.get(name) ?? 0
+    nameCounts.set(name, seen + 1)
+    if (seen === 1) {
+      duplicateNames.push(name)
+    }
+  }
+  return duplicateNames.slice().sort((a, b) => a.localeCompare(b, 'en'))
+}
+
 export const formDefinitionSchema = z
   .object({
     fields: z.array(formFieldSchema).min(FORM_DEFINITION_MIN_FIELDS).max(FORM_DEFINITION_MAX_FIELDS),
   })
   .superRefine((definition, ctx) => {
-    const names = definition.fields.map((field) => field.value_name)
-    const duplicates = names.filter((name, index) => names.indexOf(name) !== index)
-    const uniqueDuplicates = [...new Set(duplicates)]
-    if (uniqueDuplicates.length > 0) {
+    const sortedDuplicates = findDuplicateFieldNames(definition.fields)
+    if (sortedDuplicates.length > 0) {
       ctx.addIssue({
         code: 'custom',
-        message: `Duplicate field names are not allowed: ${uniqueDuplicates.sort().join(', ')}`,
+        message: `Duplicate field names are not allowed: ${sortedDuplicates.join(', ')}`,
         path: ['fields'],
       })
     }

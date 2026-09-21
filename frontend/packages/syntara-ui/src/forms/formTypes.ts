@@ -1,6 +1,6 @@
-import type { FormDefinition, FormField, FormPromptConfig } from '@syntara/contracts'
+export type { FormDefinition, FormField, FormPromptConfig } from '@syntara/contracts'
 
-export type { FormDefinition, FormField, FormPromptConfig }
+import type { FormField } from '@syntara/contracts'
 
 export type FormFieldByType<T extends FormField['type']> = Extract<FormField, { type: T }>
 

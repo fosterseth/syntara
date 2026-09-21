@@ -21,6 +21,27 @@ function coerceString(raw: unknown): string {
   return raw
 }
 
+function emailSegmentIsValid(segment: string): boolean {
+  if (segment.length === 0) {
+    return false
+  }
+  for (let index = 0; index < segment.length; index += 1) {
+    const code = segment.charCodeAt(index)
+    if (code <= 32 || code === 127 || code === 64) {
+      return false
+    }
+  }
+  return true
+}
+
+function isValidEmailShape(local: string, domain: string): boolean {
+  if (!emailSegmentIsValid(local) || !emailSegmentIsValid(domain)) {
+    return false
+  }
+  const dot = domain.indexOf('.')
+  return dot > 0 && dot < domain.length - 1
+}
+
 function coerceEmail(raw: unknown): string {
   const value = coerceString(raw)
   const at = value.lastIndexOf('@')
@@ -29,11 +50,10 @@ function coerceEmail(raw: unknown): string {
   }
   const local = value.slice(0, at)
   const domain = value.slice(at + 1).toLowerCase()
-  const normalized = `${local}@${domain}`
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+  if (!isValidEmailShape(local, domain)) {
     throw new Error('Must be a valid email address')
   }
-  return normalized
+  return `${local}@${domain}`
 }
 
 function coerceNumber(raw: unknown): number {
@@ -80,18 +100,20 @@ function coerceDate(raw: unknown): string {
   if (typeof raw !== 'string') {
     throw new TypeError(`Must be a date string, got ${typeof raw}`)
   }
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw)
-  if (!match) {
+  if (raw.length !== 10 || raw[4] !== '-' || raw[7] !== '-') {
     throw new Error('Must be a valid ISO 8601 date (YYYY-MM-DD)')
   }
-  const year = Number(match[1])
-  const month = Number(match[2])
-  const day = Number(match[3])
+  const year = Number(raw.slice(0, 4))
+  const month = Number(raw.slice(5, 7))
+  const day = Number(raw.slice(8, 10))
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new Error('Must be a valid ISO 8601 date (YYYY-MM-DD)')
+  }
   const date = new Date(Date.UTC(year, month - 1, day))
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
     throw new Error('Must be a valid ISO 8601 date (YYYY-MM-DD)')
   }
-  return `${match[1]}-${match[2]}-${match[3]}`
+  return raw
 }
 
 function coerceOptionScalar(raw: unknown): string | number | boolean {
