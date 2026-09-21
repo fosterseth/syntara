@@ -1,0 +1,202 @@
+import { z } from 'zod'
+
+import {
+  FORM_DEFINITION_MAX_FIELDS,
+  FORM_DEFINITION_MIN_FIELDS,
+  FORM_FIELD_LABEL_MAX_LENGTH,
+  FORM_FIELD_VALUE_NAME_MAX_LENGTH,
+  FORM_FIELD_VALUE_NAME_PATTERN,
+  FORM_STATIC_OPTION_LABEL_MAX_LENGTH,
+  FORM_STATIC_OPTIONS_MAX_LENGTH,
+} from './formConstants'
+import { FormFieldTypeEnum } from './formFieldTypeEnum'
+import type { FormDefinition } from './formTypes'
+import { FormDefinitionValidationError, type FormFieldValidationError } from './formValidationErrors'
+
+const fieldValueNameSchema = z
+  .string()
+  .min(1)
+  .max(FORM_FIELD_VALUE_NAME_MAX_LENGTH)
+  .regex(FORM_FIELD_VALUE_NAME_PATTERN, 'Value name must start with a letter or underscore')
+
+const fieldLabelSchema = z.string().min(1).max(FORM_FIELD_LABEL_MAX_LENGTH)
+
+const formFieldBaseSchema = z.object({
+  value_name: fieldValueNameSchema,
+  label: fieldLabelSchema,
+  placeholder: z.string().nullable().optional(),
+  help_text: z.string().nullable().optional(),
+  required: z.boolean().optional(),
+})
+
+const staticOptionSchema = z.object({
+  display_label: z.string().min(1).max(FORM_STATIC_OPTION_LABEL_MAX_LENGTH),
+  value: z.union([z.string(), z.number(), z.boolean()]),
+})
+
+const staticOptionsSchema = z.object({
+  source: z.literal('static'),
+  values: z.array(staticOptionSchema).min(1).max(FORM_STATIC_OPTIONS_MAX_LENGTH),
+})
+
+const dynamicOptionsSchema = z.object({
+  source: z.literal('dynamic'),
+  expression: z.string().min(1),
+  label_key: z.string().nullable().optional(),
+  value_key: z.string().nullable().optional(),
+})
+
+const optionsSourceSchema = z.discriminatedUnion('source', [staticOptionsSchema, dynamicOptionsSchema])
+
+const textFieldSchema = formFieldBaseSchema.extend({
+  type: z.literal(FormFieldTypeEnum.TEXT),
+  default: z.string().nullable().optional(),
+})
+
+const textAreaFieldSchema = formFieldBaseSchema.extend({
+  type: z.literal(FormFieldTypeEnum.TEXTAREA),
+  default: z.string().nullable().optional(),
+})
+
+const maskedTextFieldSchema = formFieldBaseSchema.extend({
+  type: z.literal(FormFieldTypeEnum.MASKED_TEXT),
+  default: z.string().nullable().optional(),
+})
+
+const emailFieldSchema = formFieldBaseSchema.extend({
+  type: z.literal(FormFieldTypeEnum.EMAIL),
+  default: z.string().nullable().optional(),
+})
+
+const numberFieldSchema = formFieldBaseSchema.extend({
+  type: z.literal(FormFieldTypeEnum.NUMBER),
+  default: z.union([z.number(), z.null()]).optional(),
+})
+
+const checkboxFieldSchema = formFieldBaseSchema.extend({
+  type: z.literal(FormFieldTypeEnum.CHECKBOX),
+  default: z.boolean().optional(),
+})
+
+const dateFieldSchema = formFieldBaseSchema.extend({
+  type: z.literal(FormFieldTypeEnum.DATE),
+  default: z.string().nullable().optional(),
+})
+
+const dropdownFieldSchema = formFieldBaseSchema.extend({
+  type: z.literal(FormFieldTypeEnum.DROPDOWN),
+  options: optionsSourceSchema,
+  default: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
+})
+
+const multiSelectFieldSchema = formFieldBaseSchema.extend({
+  type: z.literal(FormFieldTypeEnum.MULTI_SELECT),
+  options: optionsSourceSchema,
+  default: z
+    .array(z.union([z.string(), z.number(), z.boolean()]))
+    .nullable()
+    .optional(),
+})
+
+export const formFieldSchema = z.discriminatedUnion('type', [
+  textFieldSchema,
+  textAreaFieldSchema,
+  maskedTextFieldSchema,
+  emailFieldSchema,
+  numberFieldSchema,
+  checkboxFieldSchema,
+  dateFieldSchema,
+  dropdownFieldSchema,
+  multiSelectFieldSchema,
+])
+
+export const formDefinitionSchema = z
+  .object({
+    fields: z.array(formFieldSchema).min(FORM_DEFINITION_MIN_FIELDS).max(FORM_DEFINITION_MAX_FIELDS),
+  })
+  .superRefine((definition, ctx) => {
+    const names = definition.fields.map((field) => field.value_name)
+    const duplicates = names.filter((name, index) => names.indexOf(name) !== index)
+    const uniqueDuplicates = [...new Set(duplicates)]
+    if (uniqueDuplicates.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `Duplicate field names are not allowed: ${uniqueDuplicates.sort().join(', ')}`,
+        path: ['fields'],
+      })
+    }
+
+    for (const [index, field] of definition.fields.entries()) {
+      if (
+        (field.type === FormFieldTypeEnum.DROPDOWN || field.type === FormFieldTypeEnum.MULTI_SELECT) &&
+        field.options.source === 'static'
+      ) {
+        const validValues = new Set(field.options.values.map((option) => option.value))
+        if (field.type === FormFieldTypeEnum.MULTI_SELECT && field.default != null) {
+          const invalid = field.default.filter((value) => !validValues.has(value))
+          if (invalid.length > 0) {
+            ctx.addIssue({
+              code: 'custom',
+              message: `Field '${field.value_name}': default values ${JSON.stringify(invalid)} are not in the option list`,
+              path: ['fields', index, 'default'],
+            })
+          }
+        } else if (
+          field.type === FormFieldTypeEnum.DROPDOWN &&
+          field.default != null &&
+          !validValues.has(field.default)
+        ) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `Field '${field.value_name}': default value '${String(field.default)}' is not in the option list`,
+            path: ['fields', index, 'default'],
+          })
+        }
+      }
+    }
+  })
+
+function zodPathToField(path: ReadonlyArray<PropertyKey>): string {
+  const segments = path.map((segment) => String(segment))
+  if (segments.length >= 2 && segments[0] === 'fields' && !Number.isNaN(Number(segments[1]))) {
+    return `fields[${segments[1]}]`
+  }
+  return segments.join('.')
+}
+
+function mapZodIssuesToFieldErrors(issues: z.ZodIssue[]): FormFieldValidationError[] {
+  return issues.map((issue) => ({
+    field: zodPathToField(issue.path),
+    label: zodPathToField(issue.path),
+    code: 'invalid_default' as const,
+    message: issue.message,
+  }))
+}
+
+/**
+ * Parse and validate a form definition (shape + cross-field rules).
+ * Throws {@link FormDefinitionValidationError} when invalid.
+ */
+export function parseFormDefinition(input: unknown): FormDefinition {
+  const result = formDefinitionSchema.safeParse(input)
+  if (!result.success) {
+    throw new FormDefinitionValidationError(mapZodIssuesToFieldErrors(result.error.issues))
+  }
+  return result.data
+}
+
+/**
+ * Non-throwing parse — returns `{ success: true, data }` or `{ success: false, errors }`.
+ */
+export function safeParseFormDefinition(
+  input: unknown
+): { success: true; data: FormDefinition } | { success: false; errors: FormFieldValidationError[] } {
+  const result = formDefinitionSchema.safeParse(input)
+  if (!result.success) {
+    return { success: false, errors: mapZodIssuesToFieldErrors(result.error.issues) }
+  }
+  return { success: true, data: result.data }
+}
+
+export type FormDefinitionSchemaInput = z.input<typeof formDefinitionSchema>
+export type FormFieldSchemaInput = z.input<typeof formFieldSchema>
