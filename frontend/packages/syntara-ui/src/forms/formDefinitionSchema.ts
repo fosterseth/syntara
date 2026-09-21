@@ -205,7 +205,7 @@ export const formDefinitionSchema = z
   })
 
 function zodPathToField(path: ReadonlyArray<PropertyKey>): string {
-  const segments = path.map((segment) => String(segment))
+  const segments = path.map(String)
   if (segments.length >= 2 && segments[0] === 'fields' && !Number.isNaN(Number(segments[1]))) {
     return `fields[${segments[1]}]`
   }

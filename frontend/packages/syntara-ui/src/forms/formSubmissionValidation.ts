@@ -10,7 +10,9 @@ import {
 
 const MISSING = Symbol('missing')
 
-type Coercer = (raw: unknown) => string | number | boolean | Array<string | number | boolean>
+type OptionScalar = string | number | boolean
+
+type Coercer = (raw: unknown) => OptionScalar | Array<OptionScalar>
 
 function isEmptyValue(value: unknown): boolean {
   return value === '' || value === null || value === undefined || (Array.isArray(value) && value.length === 0)
@@ -80,14 +82,14 @@ function coerceNumber(raw: unknown): number {
   }
   if (typeof raw === 'number') {
     if (!Number.isFinite(raw)) {
-      throw new Error('Infinite and NaN values are not accepted')
+      throw new TypeError('Infinite and NaN values are not accepted')
     }
     return raw
   }
   if (typeof raw === 'string') {
     const parsed = Number(raw)
     if (!Number.isFinite(parsed)) {
-      throw new Error('Must be a valid number string')
+      throw new TypeError('Must be a valid number string')
     }
     return parsed
   }
@@ -125,7 +127,7 @@ function coerceDate(raw: unknown): string {
   const month = Number(raw.slice(5, 7))
   const day = Number(raw.slice(8, 10))
   if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-    throw new Error('Must be a valid ISO 8601 date (YYYY-MM-DD)')
+    throw new TypeError('Must be a valid ISO 8601 date (YYYY-MM-DD)')
   }
   const date = new Date(Date.UTC(year, month - 1, day))
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
@@ -134,14 +136,20 @@ function coerceDate(raw: unknown): string {
   return raw
 }
 
-function coerceOptionScalar(raw: unknown): string | number | boolean {
-  if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') {
-    return raw
-  }
-  throw new TypeError(`Must be a string, number, or boolean, got ${typeof raw}`)
+function isOptionScalarValue(raw: unknown): raw is OptionScalar {
+  const kind = typeof raw
+  return kind === 'string' || kind === 'number' || kind === 'boolean'
 }
 
-function coerceDropdown(raw: unknown): string | number | boolean {
+function coerceOptionScalar(raw: unknown): OptionScalar {
+  const kind = typeof raw
+  if (isOptionScalarValue(raw)) {
+    return raw
+  }
+  throw new TypeError(`Must be a string, number, or boolean, got ${kind}`)
+}
+
+function coerceDropdown(raw: unknown): OptionScalar {
   if (Array.isArray(raw)) {
     throw new TypeError('Dropdown expects a single value, not a list')
   }
@@ -151,7 +159,7 @@ function coerceDropdown(raw: unknown): string | number | boolean {
   return coerceOptionScalar(raw)
 }
 
-function coerceMultiSelect(raw: unknown): Array<string | number | boolean> {
+function coerceMultiSelect(raw: unknown): Array<OptionScalar> {
   if (Array.isArray(raw)) {
     return raw.map((item) => coerceOptionScalar(item))
   }
@@ -173,7 +181,7 @@ const COERCERS: Record<FormField['type'], Coercer> = {
   [FormFieldTypeEnum.MULTI_SELECT]: coerceMultiSelect,
 }
 
-function coerceField(field: FormField, raw: unknown): string | number | boolean | Array<string | number | boolean> {
+function coerceField(field: FormField, raw: unknown): OptionScalar | Array<OptionScalar> {
   return COERCERS[field.type](raw)
 }
 
