@@ -64,17 +64,6 @@ class WorkflowFormPromptMixin:
     # Provided by OrchestratorWorkflow; declared here for mypy only
     _scrub_data: Callable[[dict[str, Any]], dict[str, Any]]
 
-    def _loop_iteration_path(self, node_id: str) -> list[int]:
-        """Return enclosing-loop indices for this node, outermost first (empty if none)."""
-        return loop_index_chain(node_id, self.loop_body_map, self.node_control_data)
-
-    def _form_prompt_activity_id(self, node_id: str) -> str:
-        """Return the Temporal activity ID for this form_prompt node.
-
-        Always uses the loop-index chain.
-        """
-        return form_prompt_temporal_activity_id(node_id, self.loop_body_map, self.node_control_data)
-
     async def _expire_form_prompts(self, node_id: str | None, activity_id: str) -> None:
         """Best-effort expire pending form prompts.
 
@@ -97,7 +86,7 @@ class WorkflowFormPromptMixin:
 
     async def _expire_form_prompt_requests(self, node_id: str) -> None:
         """Expire pending form prompts for a timed-out form_prompt node."""
-        activity_id = self._form_prompt_activity_id(node_id)
+        activity_id = form_prompt_temporal_activity_id(node_id, self.loop_body_map, self.node_control_data)
         await self._expire_form_prompts(node_id, activity_id=f"__internal__expire_form_prompt_{activity_id}")
 
     async def _expire_remaining_form_prompts(self, graph: "WorkflowGraph") -> None:
@@ -125,7 +114,7 @@ class WorkflowFormPromptMixin:
 
         Resolves the dangling Temporal activity so it doesn't keep waiting forever.
         """
-        activity_id = self._form_prompt_activity_id(node_id)
+        activity_id = form_prompt_temporal_activity_id(node_id, self.loop_body_map, self.node_control_data)
         try:
             await workflow.execute_local_activity(
                 fail_detached_form_prompt_activity,
@@ -237,8 +226,8 @@ class WorkflowFormPromptMixin:
             responder_user_ids,
             responder_group_ids,
             self._project_id,
-            self._loop_iteration_path(node.id),
-            self._form_prompt_activity_id(node.id),
+            loop_index_chain(node.id, self.loop_body_map, self.node_control_data),
+            form_prompt_temporal_activity_id(node.id, self.loop_body_map, self.node_control_data),
             message_text,
             submit_label,
             success_message,
@@ -264,7 +253,7 @@ class WorkflowFormPromptMixin:
 
         """
         node_id = node.id
-        prompt_activity_id = self._form_prompt_activity_id(node_id)
+        prompt_activity_id = form_prompt_temporal_activity_id(node_id, self.loop_body_map, self.node_control_data)
         args = await self._prepare_form_prompt_args(node, graph, resolved_parameters)
         window = resolve_response_window(node, self._runtime_settings)
         fallback_behavior = resolved_parameters.get("fallback_behavior", "fail")
