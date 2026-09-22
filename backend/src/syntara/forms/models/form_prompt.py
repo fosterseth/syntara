@@ -19,6 +19,7 @@ from syntara.core.models.user_reference import UserReference
 from syntara.core.utils.sqlmodel import DiscriminatedJSONB, postgres_enum_column
 from syntara.forms.models.api_models import (
     FormPromptStatus,
+    FormPromptSummary,
     ResponderGroupSummary,
     ResponderUserSummary,
 )
@@ -57,8 +58,8 @@ class BaseFormPrompt(BaseResource, table=False):
 
     message: str | None = Field(
         default=None,
-        max_length=FieldLimits.DESCRIPTION_MAX_LENGTH,
-        sa_type=String(FieldLimits.DESCRIPTION_MAX_LENGTH),  # type: ignore[call-overload]
+        max_length=FieldLimits.FORM_MESSAGE_MAX_LENGTH,
+        sa_type=String(FieldLimits.FORM_MESSAGE_MAX_LENGTH),  # type: ignore[call-overload]
         description="Resolved guidance message shown to responders",
     )
 
@@ -94,6 +95,13 @@ class BaseFormPrompt(BaseResource, table=False):
             create_constraint=True,
             server_default=text("'pending'::formpromptstatus"),
         ),
+    )
+
+    notes: str | None = Field(
+        default=None,
+        max_length=FieldLimits.DESCRIPTION_MAX_LENGTH,
+        sa_type=String(FieldLimits.DESCRIPTION_MAX_LENGTH),  # type: ignore[call-overload]
+        description="Optional notes explaining the last status change (e.g., reason for cancellation)",
     )
 
     # Timing
@@ -203,7 +211,7 @@ class FormPrompt(BaseFormPrompt, table=True):
 
     temporal_activity_id: str | None = Field(
         default=None,
-        max_length=FieldLimits.NAME_MAX_LENGTH,
+        max_length=FieldLimits.TEMPORAL_ACTIVITY_ID_MAX_LENGTH,
         sa_type=String(FieldLimits.NAME_MAX_LENGTH),  # type: ignore[call-overload]
         description="Temporal activity ID to signal when this prompt is answered",
     )
@@ -273,5 +281,9 @@ class FormPromptRead(BaseFormPrompt, table=False):
 # ============================================================================
 
 
-class FormPromptListResponse(ResourcesResponse[FormPromptRead]):
-    """Paginated list response for form prompts."""
+class FormPromptListResponse(ResourcesResponse[FormPromptSummary]):
+    """Paginated list response for form prompts.
+
+    Uses FormPromptSummary (8 documented fields) for internal workflow engine endpoints.
+    AAP-91889 will add user-facing list endpoints using FormPromptRead.
+    """
