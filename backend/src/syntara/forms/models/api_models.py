@@ -104,10 +104,9 @@ class FormPromptCreateRequest(SQLModel):
         default_factory=list,
         description="Enclosing-loop indices, outermost first (empty when not inside a loop)",
     )
-    temporal_activity_id: str | None = Field(
-        default=None,
+    temporal_activity_id: str = Field(
         max_length=FieldLimits.TEMPORAL_ACTIVITY_ID_MAX_LENGTH,
-        description="Temporal activity ID to signal on submit (defaults to prompt_node_id)",
+        description="Temporal activity ID to signal on submit",
     )
     timeout_at: datetime | None = Field(None, description="When this prompt expires (null = no timeout)")
     form_definition: FormDefinition = Field(..., description="Form schema defining fields to collect")
@@ -196,7 +195,10 @@ class FormPromptSummary(SQLModel):
     name: str = Field(..., description="Display name for the form prompt")
     status: FormPromptStatus = Field(..., description="Current prompt status")
     loop_iteration_path: list[int] = Field(default_factory=list, description="Enclosing-loop indices, outermost first")
-    temporal_activity_id: str | None = Field(None, description="Temporal activity ID for async completion")
+    temporal_activity_id: str = Field(
+        max_length=FieldLimits.TEMPORAL_ACTIVITY_ID_MAX_LENGTH,
+        description="Temporal activity ID for async completion",
+    )
 
 
 class BatchUpdateResult(SQLModel):

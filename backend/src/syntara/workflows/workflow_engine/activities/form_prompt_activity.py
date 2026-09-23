@@ -75,8 +75,7 @@ async def create_form_prompt_activity(
         responder_group_ids: List of group UUIDs whose members can respond.
         project_id: Project ID for the form prompt (from parent execution).
         loop_iteration_path: Enclosing-loop indices, outermost first (empty if none).
-        temporal_activity_id: Temporal activity ID to signal on submit. Defaults to
-            ``prompt_node_id`` for backward compatibility.
+        temporal_activity_id: Temporal activity ID to signal on submit.
         message: Resolved message shown above the form, or None.
         submit_label: Submit button label, or None.
         success_message: Message shown after successful submission, or None.
@@ -111,7 +110,7 @@ async def create_form_prompt_activity(
         "responder_user_ids": responder_user_ids,
         "responder_group_ids": responder_group_ids,
         "loop_iteration_path": loop_iteration_path or [],
-        "temporal_activity_id": temporal_activity_id or prompt_node_id,
+        "temporal_activity_id": temporal_activity_id,
         "message": message,
         "submit_label": submit_label,
         "success_message": success_message,
@@ -229,11 +228,25 @@ async def expire_form_prompts_activity(
     """
     result = await _batch_update_form_prompts(execution_id, "expire", "batch_expire", "expired_count", node_id=node_id)
 
-    # TODO(https://redhat.atlassian.net/browse/AAP-91888): dispatch FormPromptExpiredEvent per record
+    # Dispatch audit events for each expired prompt
     prompt_records = result.pop("_prompt_records", [])
     if prompt_records:
+        from uuid import UUID  # noqa: PLC0415
+
+        from syntara.audit.dispatcher import AuditEventDispatcher  # noqa: PLC0415
+        from syntara.forms.audit.form_prompt import FormPromptExpiredEvent  # noqa: PLC0415
+
+        for record in prompt_records:
+            AuditEventDispatcher.dispatch(
+                FormPromptExpiredEvent(
+                    prompt_id=UUID(record["id"]),
+                    execution_id=UUID(execution_id),
+                    prompt_node_id=record["prompt_node_id"],
+                )
+            )
+
         logger.info(
-            "Expired form prompts",
+            "Expired form prompts and dispatched audit events",
             execution_id=execution_id,
             count=len(prompt_records),
         )
