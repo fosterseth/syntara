@@ -101,8 +101,8 @@ def form_prompt_already_requested_handler(request: Request, exc: "FormPromptAlre
 def form_data_validation_error_handler(request: Request, exc: "FormDataValidationError") -> JSONResponse:
     """Handle FormDataValidationError.
 
-    Returns HTTP 422 with the per-field errors flattened into the detail string,
-    matching the framework's validation_error_handler format.
+    Returns HTTP 422 with all per-field failures concatenated in the standard
+    Problem Details ``detail`` field.
     """
     logger.warning(
         "Form validation failed",
@@ -111,7 +111,6 @@ def form_data_validation_error_handler(request: Request, exc: "FormDataValidatio
     )
 
     detail = "Form validation failed: " + "; ".join(f"{err.field}: {err.message}" for err in exc.errors)
-
     return create_problem_details_response(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         problem_type=PROBLEM_TYPES["validation_error"],
