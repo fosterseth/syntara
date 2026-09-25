@@ -44247,7 +44247,8 @@
                 "type": "null"
               }
             ],
-            "description": "User who submitted the response"
+            "description": "User who submitted the response",
+            "readOnly": true
           },
           "signal_delivery_error": {
             "anyOf": [

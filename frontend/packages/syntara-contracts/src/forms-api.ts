@@ -234,7 +234,7 @@ export interface components {
        */
       responder_groups?: components['schemas']['ResponderGroupSummary'][]
       /** @description User who submitted the response */
-      responded_by?: components['schemas']['UserReference'] | null
+      readonly responded_by?: components['schemas']['UserReference'] | null
       /**
        * Signal Delivery Error
        * @description Error if the workflow signal failed after a response. Only present in the respond response; null on subsequent reads.
