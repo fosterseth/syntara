@@ -7,6 +7,7 @@ registry retrieve callback and cached for the lifetime of the process.
 """
 
 import json
+from collections.abc import Mapping
 from collections import defaultdict, deque
 from functools import lru_cache
 from typing import Any
@@ -585,7 +586,7 @@ def _collect_form_prompt_validation_findings(
 
 
 def _form_field_type_finding(
-    error: dict[str, Any],
+    error: Mapping[str, Any],
     parameters: dict[str, Any],
     node_id: str | None,
 ) -> ValidationFinding | None:
