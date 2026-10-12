@@ -219,7 +219,7 @@ def test_publish_rejects_invalid_form_definition_and_it_cannot_run_as_published(
         (
             "unknown_type",
             [{"type": "not_a_real_type", "value_name": "choice", "label": "Choice"}],
-            "schema_violation",
+            "form_prompt_configuration",
             "parameters.form_definition.fields.0",
             "",
         ),

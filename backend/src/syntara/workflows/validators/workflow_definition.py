@@ -589,7 +589,7 @@ def _form_field_type_finding(
     parameters: dict[str, Any],
     node_id: str | None,
 ) -> ValidationFinding | None:
-    """Convert an outer form-field discriminator error into a safe finding.
+    """Convert a form field type discriminator error into a safe finding.
 
     The shared workflow JSON Schema validates the broad form field object shape, but it does not
     enumerate field types. Preserve the model validator's discriminator errors so save-time
@@ -631,7 +631,7 @@ def _form_field_type_finding(
 
     return ValidationFinding(
         severity=ValidationSeverity.error,
-        category=ValidationCategory.schema_violation,
+        category=ValidationCategory.form_prompt_configuration,
         message=message,
         node_id=node_id,
         field_path=f"parameters.form_definition.fields.{field_index}.type",
