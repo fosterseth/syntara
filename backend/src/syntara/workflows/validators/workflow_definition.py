@@ -435,16 +435,24 @@ def _check_form_prompt_node_findings(
 
 def _collect_form_prompt_model_findings(
     workflow_definition: dict[str, Any],
+    existing_findings: list[ValidationFinding],
 ) -> list[ValidationFinding]:
     """Collect form model validation errors omitted by the generated JSON Schema.
 
     JSON Schema covers the shape of form values, but it cannot represent custom
     Pydantic validators such as calendar-date validation or checks that a default
-    can be submitted. Request models may retain the raw workflow dictionary when
-    typed parsing fails, so run the form parameter model here as part of the
-    shared verify/save/publish validation path.
+    can be submitted. The workflow executor schema also leaves authored field
+    properties open, so Pydantic's ordinary field errors need to be surfaced
+    here. Request models may retain the raw workflow dictionary when typed
+    parsing fails, so run the form parameter model as part of the shared
+    verify/save/publish validation path.
     """
     findings: list[ValidationFinding] = []
+    schema_locations = {
+        (finding.node_id, finding.field_path)
+        for finding in existing_findings
+        if finding.category == ValidationCategory.schema_violation
+    }
     for node in workflow_definition.get("nodes", []):
         if not isinstance(node, dict) or node.get("type") != NodeType.FORM_PROMPT:
             continue
@@ -458,7 +466,14 @@ def _collect_form_prompt_model_findings(
         try:
             FormPromptNodeParameters.model_validate(parameters)
         except ValidationError as exc:
-            findings.extend(_collect_safe_value_error_findings(exc, node_id))
+            findings.extend(
+                _collect_form_prompt_validation_findings(
+                    exc,
+                    node_id,
+                    parameters,
+                    schema_locations,
+                )
+            )
             findings.extend(_collect_form_field_type_findings(exc, parameters, node_id))
         except FormDefinitionError as exc:
             findings.extend(_collect_form_definition_error_findings(exc, parameters, node_id))
@@ -466,24 +481,78 @@ def _collect_form_prompt_model_findings(
     return findings
 
 
-def _collect_safe_value_error_findings(exc: ValidationError, node_id: str | None) -> list[ValidationFinding]:
-    """Convert safe Pydantic value errors into workflow findings."""
+def _schema_finding_is_redundant(
+    schema_finding: ValidationFinding,
+    form_prompt_finding: ValidationFinding,
+) -> bool:
+    """Prefer the form-specific authored-source finding for resolved options."""
+    return (
+        schema_finding.category == ValidationCategory.schema_violation
+        and form_prompt_finding.category == ValidationCategory.form_prompt_configuration
+        and schema_finding.node_id == form_prompt_finding.node_id
+        and form_prompt_finding.message.startswith("Field '")
+        and "options source 'dynamic_resolved'" in form_prompt_finding.message
+        and schema_finding.field_path is not None
+        and schema_finding.field_path.endswith(".options.source")
+        and (
+            form_prompt_finding.field_path == _FORM_PROMPT_FIELD_PATH_PREFIX
+            or (
+                form_prompt_finding.field_path is not None
+                and schema_finding.field_path == f"{form_prompt_finding.field_path}.source"
+            )
+        )
+    )
+
+
+_FORM_FIELD_VARIANTS = frozenset(
+    {"text", "textarea", "masked_text", "email", "number", "checkbox", "date", "dropdown", "multi_select"}
+)
+_FORM_OPTIONS_VARIANTS = frozenset({"static", "dynamic", "dynamic_resolved"})
+_FORM_FIELD_LOCATION_MIN_PARTS = 3
+_FORM_PROMPT_FIELD_PATH_PREFIX = "parameters.form_definition"
+
+
+def _collect_form_prompt_validation_findings(
+    exc: ValidationError,
+    node_id: str | None,
+    parameters: dict[str, Any],
+    schema_locations: set[tuple[str | None, str | None]],
+) -> list[ValidationFinding]:
+    """Convert Pydantic form errors into safe, field-addressable findings."""
     findings: list[ValidationFinding] = []
     for error in exc.errors():
-        context = error.get("ctx")
-        safe_error = context.get("error") if isinstance(context, dict) else None
-        if not isinstance(safe_error, SafeValueError):
+        location = error.get("loc", ())
+        if (
+            error.get("type") in {"union_tag_invalid", "union_tag_not_found"}
+            and len(location) == _FORM_FIELD_TYPE_LOCATION_PARTS
+            and location[0] == "form_definition"
+            and location[1] == "fields"
+            and isinstance(location[2], int)
+        ):
+            # The dedicated discriminator handler emits a single, field-specific
+            # finding for unknown or missing authored field types.
             continue
 
-        location = error.get("loc", ())
-        field_path = "parameters"
-        if location:
-            field_path += "." + ".".join(str(part) for part in location)
+        context = error.get("ctx")
+        safe_error = context.get("error") if isinstance(context, dict) else None
+        is_safe_configuration_error = isinstance(safe_error, SafeValueError)
+        message = str(safe_error) if is_safe_configuration_error else str(error["msg"])
+        field_path = _form_prompt_validation_field_path(error.get("loc", ()), parameters, message)
+
+        # JSON Schema already reports ordinary structural errors at this exact
+        # location. Keep its finding and avoid a duplicate Pydantic message.
+        if not is_safe_configuration_error and (node_id, field_path) in schema_locations:
+            continue
+
         findings.append(
             ValidationFinding(
                 severity=ValidationSeverity.error,
-                category=ValidationCategory.form_prompt_configuration,
-                message=str(safe_error),
+                category=(
+                    ValidationCategory.form_prompt_configuration
+                    if is_safe_configuration_error
+                    else ValidationCategory.schema_violation
+                ),
+                message=message,
                 node_id=node_id,
                 field_path=field_path,
             )
@@ -549,8 +618,75 @@ def _collect_form_field_type_findings(
         )
 
     return findings
+def _form_prompt_validation_field_path(
+    location: tuple[Any, ...] | list[Any],
+    parameters: dict[str, Any],
+    message: str,
+) -> str:
+    """Normalize Pydantic discriminator locations to authored form paths."""
+    path_parts = _normalize_form_prompt_location(location)
+    field_path = _FORM_PROMPT_FIELD_PATH_PREFIX
+    if path_parts:
+        return field_path + "." + ".".join(str(part) for part in path_parts)
+
+    field_index = _form_prompt_field_index(parameters, message)
+    if field_index is None:
+        return field_path
+
+    field_path += f".fields.{field_index}"
+    if "default" in message.lower():
+        field_path += ".default"
+    elif "options source" in message.lower():
+        field_path += ".options"
+    return field_path
 
 
+def _normalize_form_prompt_location(location: tuple[Any, ...] | list[Any]) -> list[Any]:
+    """Remove Pydantic union tags from a form-field error location."""
+    path_parts = list(location)
+    if path_parts and path_parts[0] == "form_definition":
+        path_parts = path_parts[1:]
+
+    if (
+        len(path_parts) > _FORM_FIELD_LOCATION_MIN_PARTS
+        and path_parts[0] == "fields"
+        and isinstance(path_parts[1], int)
+        and path_parts[2] in _FORM_FIELD_VARIANTS
+    ):
+        path_parts.pop(2)
+
+    if "options" in path_parts:
+        options_index = path_parts.index("options")
+        if options_index + 1 < len(path_parts) and path_parts[options_index + 1] in _FORM_OPTIONS_VARIANTS:
+            path_parts.pop(options_index + 1)
+    return path_parts
+
+
+def _form_prompt_field_index(parameters: dict[str, Any], message: str) -> int | None:
+    """Find the field named by a model-level form error message."""
+    form_definition = parameters.get("form_definition")
+    raw_fields = (
+        form_definition.get("fields", [])
+        if isinstance(form_definition, dict)
+        else getattr(form_definition, "fields", [])
+    )
+    if isinstance(raw_fields, tuple):
+        raw_fields = list(raw_fields)
+    if not isinstance(raw_fields, list):
+        return None
+    for index, field in enumerate(raw_fields):
+        value_name = _form_field_value_name(field)
+        if value_name is not None and message.startswith(f"Field '{value_name}':"):
+            return index
+    if len(raw_fields) == 1 and message.startswith("Field '"):
+        return 0
+    return None
+
+
+def _form_field_value_name(field: object) -> str | None:
+    """Read a field name from a raw workflow dictionary or parsed model."""
+    value_name = field.get("value_name") if isinstance(field, dict) else getattr(field, "value_name", None)
+    return value_name if isinstance(value_name, str) else None
 def _collect_form_definition_error_findings(
     exc: FormDefinitionError,
     parameters: dict[str, Any],
@@ -941,7 +1077,17 @@ class WorkflowValidator:
             findings.extend(_check_form_prompt_node_findings(workflow_definition))
             findings.extend(check_template_expressions(workflow_definition, node_ids))
 
-        findings.extend(_collect_form_prompt_model_findings(workflow_definition))
+        form_prompt_findings = _collect_form_prompt_model_findings(workflow_definition, findings)
+        if form_prompt_findings:
+            findings[:] = [
+                finding
+                for finding in findings
+                if not any(
+                    _schema_finding_is_redundant(finding, form_prompt_finding)
+                    for form_prompt_finding in form_prompt_findings
+                )
+            ]
+            findings.extend(form_prompt_findings)
         findings.extend(collect_scheduled_trigger_config_findings(workflow_definition))
 
         return findings
