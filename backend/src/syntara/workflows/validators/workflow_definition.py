@@ -517,7 +517,7 @@ def _collect_authored_resolved_option_findings(
     return findings
 
 
-def _schema_finding_is_redundant(
+def _form_prompt_schema_finding_is_redundant(
     schema_finding: ValidationFinding,
     form_prompt_finding: ValidationFinding,
 ) -> bool:
@@ -1069,7 +1069,7 @@ class WorkflowValidator:
                 finding
                 for finding in findings
                 if not any(
-                    _schema_finding_is_redundant(finding, form_prompt_finding)
+                    _form_prompt_schema_finding_is_redundant(finding, form_prompt_finding)
                     for form_prompt_finding in form_prompt_findings
                 )
             ]
