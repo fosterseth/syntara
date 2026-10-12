@@ -1,11 +1,40 @@
 """Unit tests for form prompt node validation rules."""
 
+from typing import Any
+
 import pytest
 
 from syntara.workflows.models.validation_finding import ValidationCategory, ValidationSeverity
 from syntara.workflows.validators.workflow_definition import WorkflowValidator
 
-_VALID_FORM_DEFINITION = {"fields": [{"type": "text", "value_name": "answer", "label": "Answer"}]}
+_VALID_FORM_DEFINITION: dict[str, Any] = {
+    "fields": [{"type": "text", "value_name": "answer", "label": "Answer"}]
+}
+
+
+def _workflow_with_form_prompt(
+    fields: list[dict[str, Any]],
+    *,
+    extra_parameters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a valid graph around form fields and optional prompt parameters."""
+    parameters: dict[str, Any] = {"form_definition": {"fields": fields}}
+    if extra_parameters:
+        parameters.update(extra_parameters)
+
+    return {
+        "schema_version": "2.0.0",
+        "name": "form-prompt-paths",
+        "triggers": [{"id": "trigger", "type": "manual_trigger", "parameters": {}}],
+        "nodes": [
+            {"id": "form", "type": "form_prompt", "parameters": parameters},
+            {"id": "consumer", "type": "script", "parameters": {"language": "bash", "code": "echo done"}},
+        ],
+        "edges": [
+            {"from": "trigger", "to": "form"},
+            {"from": "form", "to": "consumer", "from_port": "submitted"},
+        ],
+    }
 
 
 class TestFormPromptPlacementMatrix:
@@ -335,6 +364,47 @@ class TestFormPromptValidationErrorPath:
         workflow_validator = WorkflowValidator()
         with pytest.raises(SafeValueError):
             workflow_validator.validate_workflow_definition(workflow_def)
+
+
+class TestFormPromptFindingPaths:
+    """Pydantic findings keep parameter and field locations anchored."""
+
+    def test_non_form_definition_parameter_path_keeps_parameters_prefix(self) -> None:
+        workflow_def = _workflow_with_form_prompt(
+            _VALID_FORM_DEFINITION["fields"],
+            extra_parameters={"css_override": ".form { background: url(https://example.test); }"},
+        )
+
+        result = WorkflowValidator().collect_findings(workflow_def)
+
+        finding = next(f for f in result.findings if f.node_id == "form")
+        assert finding.category == ValidationCategory.form_prompt_configuration
+        assert finding.field_path == "parameters.css_override"
+
+    def test_nested_form_field_path_preserves_form_definition_segment(self) -> None:
+        workflow_def = _workflow_with_form_prompt(
+            [{"type": "text", "value_name": "bad name", "label": "Answer"}]
+        )
+
+        result = WorkflowValidator().collect_findings(workflow_def)
+
+        finding = next(f for f in result.findings if f.node_id == "form")
+        assert finding.category == ValidationCategory.schema_violation
+        assert finding.field_path == "parameters.form_definition.fields.0.value_name"
+
+    def test_form_definition_error_points_to_invalid_default(self) -> None:
+        workflow_def = _workflow_with_form_prompt(
+            [
+                {"type": "text", "value_name": "answer", "label": "Answer"},
+                {"type": "email", "value_name": "contact", "label": "Contact", "default": "not-an-email"},
+            ]
+        )
+
+        result = WorkflowValidator().collect_findings(workflow_def)
+
+        finding = next(f for f in result.findings if f.node_id == "form")
+        assert finding.category == ValidationCategory.form_prompt_configuration
+        assert finding.field_path == "parameters.form_definition.fields.1.default"
 
 
 @pytest.mark.parametrize(
