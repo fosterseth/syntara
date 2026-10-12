@@ -298,6 +298,18 @@ class DropdownField(FormFieldBase):
     options: OptionsSource
     default: str | int | float | bool | None = None
 
+    @model_validator(mode="after")
+    def _default_in_option_list(self) -> DropdownField:
+        """Require a static or resolved default to occur in this field's options."""
+        if self.default is None or not isinstance(self.options, (StaticOptions, ResolvedOptions)):
+            return self
+
+        valid_values = {option.value for option in self.options.values}
+        if self.default not in valid_values:
+            msg = f"Field '{self.value_name}': default value '{self.default}' is not in the option list"
+            raise SafeValueError(msg)
+        return self
+
 
 class MultiSelectField(FormFieldBase):
     """Multi-select field."""
@@ -305,6 +317,16 @@ class MultiSelectField(FormFieldBase):
     type: Literal["multi_select"]
     options: OptionsSource
     default: list[str | int | float | bool] | None = None
+
+    @model_validator(mode="after")
+    def _defaults_in_option_list(self) -> MultiSelectField:
+        """Require multi-select defaults to occur in static or resolved options."""
+        if self.default is None or not isinstance(self.options, (StaticOptions, ResolvedOptions)):
+            return self
+
+        valid_values = {option.value for option in self.options.values}
+        _check_multi_select_defaults(self.value_name, self.default, valid_values)
+        return self
 
 
 FormField = Annotated[
@@ -353,31 +375,4 @@ class FormDefinition(BaseModel):
         if duplicates:
             msg = f"Duplicate field names are not allowed: {', '.join(sorted(duplicates))}"
             raise SafeValueError(msg)
-        return self
-
-    @model_validator(mode="after")
-    def _default_in_option_list(self) -> FormDefinition:
-        """Ensure defaults belong to static or runtime-resolved option lists.
-
-        Dynamic options have not been materialized yet, so their defaults are
-        checked by the workflow engine after it resolves the upstream value.
-        """
-        for field in self.fields:
-            if not isinstance(field, (DropdownField, MultiSelectField)) or not isinstance(
-                field.options, (StaticOptions, ResolvedOptions)
-            ):
-                continue
-
-            valid_values = {opt.value for opt in field.options.values}
-
-            # Bind to a local after narrowing the field type: the checkers track
-            # `defaults is not None` on a local, but disagree about the type of
-            # `field.default` across the two branches of the union.
-            if isinstance(field, MultiSelectField):
-                defaults = field.default
-                if defaults is not None:
-                    _check_multi_select_defaults(field.value_name, defaults, valid_values)
-            elif field.default is not None and field.default not in valid_values:
-                msg = f"Field '{field.value_name}': default value '{field.default}' is not in the option list"
-                raise SafeValueError(msg)
         return self

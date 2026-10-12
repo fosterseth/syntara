@@ -463,6 +463,8 @@ def _collect_form_prompt_model_findings(
         if not isinstance(parameters, dict):
             continue
 
+        authored_option_findings = _collect_authored_resolved_option_findings(parameters, node_id)
+        findings.extend(authored_option_findings)
         try:
             FormPromptNodeParameters.model_validate(parameters)
         except ValidationError as exc:
@@ -480,6 +482,41 @@ def _collect_form_prompt_model_findings(
     return findings
 
 
+def _collect_authored_resolved_option_findings(
+    parameters: dict[str, Any],
+    node_id: str | None,
+) -> list[ValidationFinding]:
+    """Report engine-produced option snapshots with their authored field paths."""
+    form_definition = parameters.get("form_definition")
+    fields = form_definition.get("fields", []) if isinstance(form_definition, dict) else []
+    if not isinstance(fields, list):
+        return []
+
+    findings: list[ValidationFinding] = []
+    for index, field in enumerate(fields):
+        if not isinstance(field, dict) or field.get("type") not in {"dropdown", "multi_select"}:
+            continue
+        options = field.get("options")
+        if not isinstance(options, dict) or options.get("source") != "dynamic_resolved":
+            continue
+
+        value_name = field.get("value_name")
+        field_name = value_name if isinstance(value_name, str) else f"at index {index}"
+        findings.append(
+            ValidationFinding(
+                severity=ValidationSeverity.error,
+                category=ValidationCategory.form_prompt_configuration,
+                message=(
+                    f"Field '{field_name}': options source 'dynamic_resolved' is produced by the "
+                    "workflow engine at run time and cannot be authored. Use 'static' or 'dynamic'."
+                ),
+                node_id=node_id,
+                field_path=f"parameters.form_definition.fields.{index}.options",
+            )
+        )
+    return findings
+
+
 def _schema_finding_is_redundant(
     schema_finding: ValidationFinding,
     form_prompt_finding: ValidationFinding,
@@ -491,15 +528,9 @@ def _schema_finding_is_redundant(
         and schema_finding.node_id == form_prompt_finding.node_id
         and form_prompt_finding.message.startswith("Field '")
         and "options source 'dynamic_resolved'" in form_prompt_finding.message
+        and form_prompt_finding.field_path is not None
         and schema_finding.field_path is not None
-        and schema_finding.field_path.endswith(".options.source")
-        and (
-            form_prompt_finding.field_path == _FORM_PROMPT_FIELD_PATH_PREFIX
-            or (
-                form_prompt_finding.field_path is not None
-                and schema_finding.field_path == f"{form_prompt_finding.field_path}.source"
-            )
-        )
+        and schema_finding.field_path == f"{form_prompt_finding.field_path}.source"
     )
 
 
@@ -507,8 +538,6 @@ _FORM_FIELD_VARIANTS = frozenset(
     {"text", "textarea", "masked_text", "email", "number", "checkbox", "date", "dropdown", "multi_select"}
 )
 _FORM_OPTIONS_VARIANTS = frozenset({"static", "dynamic", "dynamic_resolved"})
-_FORM_FIELD_LOCATION_MIN_PARTS = 3
-_FORM_PROMPT_FIELD_PATH_PREFIX = "parameters.form_definition"
 
 
 def _collect_form_prompt_validation_findings(
@@ -529,7 +558,10 @@ def _collect_form_prompt_validation_findings(
         safe_error = context.get("error") if isinstance(context, dict) else None
         is_safe_configuration_error = isinstance(safe_error, SafeValueError)
         message = str(safe_error) if is_safe_configuration_error else str(error["msg"])
-        field_path = _form_prompt_validation_field_path(error.get("loc", ()), parameters, message)
+        if is_safe_configuration_error and "options source 'dynamic_resolved'" in message:
+            # The raw-definition pass reports this with a field index.
+            continue
+        field_path = _form_prompt_validation_field_path(error.get("loc", ()), message)
 
         # JSON Schema already reports ordinary structural errors at this exact
         # location. Keep its finding and avoid a duplicate Pydantic message.
@@ -608,73 +640,37 @@ def _form_field_type_finding(
 
 def _form_prompt_validation_field_path(
     location: tuple[Any, ...] | list[Any],
-    parameters: dict[str, Any],
     message: str,
 ) -> str:
-    """Normalize Pydantic discriminator locations to authored form paths."""
+    """Normalize Pydantic locations into paths rooted at workflow parameters."""
     path_parts = _normalize_form_prompt_location(location)
-    field_path = _FORM_PROMPT_FIELD_PATH_PREFIX
-    if path_parts:
-        return field_path + "." + ".".join(str(part) for part in path_parts)
+    if not path_parts:
+        return "parameters.form_definition"
 
-    field_index = _form_prompt_field_index(parameters, message)
-    if field_index is None:
-        return field_path
-
-    field_path += f".fields.{field_index}"
-    if "default" in message.lower():
+    field_path = "parameters." + ".".join(str(part) for part in path_parts)
+    if "default" in message.lower() and isinstance(path_parts[-1], int):
         field_path += ".default"
-    elif "options source" in message.lower():
-        field_path += ".options"
     return field_path
 
 
 def _normalize_form_prompt_location(location: tuple[Any, ...] | list[Any]) -> list[Any]:
     """Remove Pydantic union tags from a form-field error location."""
     path_parts = list(location)
-    if path_parts and path_parts[0] == "form_definition":
-        path_parts = path_parts[1:]
-
+    form_definition_offset = 1 if path_parts and path_parts[0] == "form_definition" else 0
+    field_type_index = form_definition_offset + 2
     if (
-        len(path_parts) > _FORM_FIELD_LOCATION_MIN_PARTS
-        and path_parts[0] == "fields"
-        and isinstance(path_parts[1], int)
-        and path_parts[2] in _FORM_FIELD_VARIANTS
+        len(path_parts) > field_type_index
+        and path_parts[form_definition_offset] == "fields"
+        and isinstance(path_parts[form_definition_offset + 1], int)
+        and path_parts[field_type_index] in _FORM_FIELD_VARIANTS
     ):
-        path_parts.pop(2)
+        path_parts.pop(field_type_index)
 
     if "options" in path_parts:
         options_index = path_parts.index("options")
         if options_index + 1 < len(path_parts) and path_parts[options_index + 1] in _FORM_OPTIONS_VARIANTS:
             path_parts.pop(options_index + 1)
     return path_parts
-
-
-def _form_prompt_field_index(parameters: dict[str, Any], message: str) -> int | None:
-    """Find the field named by a model-level form error message."""
-    form_definition = parameters.get("form_definition")
-    raw_fields = (
-        form_definition.get("fields", [])
-        if isinstance(form_definition, dict)
-        else getattr(form_definition, "fields", [])
-    )
-    if isinstance(raw_fields, tuple):
-        raw_fields = list(raw_fields)
-    if not isinstance(raw_fields, list):
-        return None
-    for index, field in enumerate(raw_fields):
-        value_name = _form_field_value_name(field)
-        if value_name is not None and message.startswith(f"Field '{value_name}':"):
-            return index
-    if len(raw_fields) == 1 and message.startswith("Field '"):
-        return 0
-    return None
-
-
-def _form_field_value_name(field: object) -> str | None:
-    """Read a field name from a raw workflow dictionary or parsed model."""
-    value_name = field.get("value_name") if isinstance(field, dict) else getattr(field, "value_name", None)
-    return value_name if isinstance(value_name, str) else None
 
 
 def _collect_form_definition_error_findings(
