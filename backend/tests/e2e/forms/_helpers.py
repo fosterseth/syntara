@@ -108,6 +108,8 @@ def wait_for_activity_outputs(
         time.sleep(1)
 
     pytest.fail(f"Execution {exec_id} did not expose output data for activities: {sorted(missing)} within {timeout}s")
+
+
 def assert_problem_response(
     response: Response[Any],
     *,
@@ -154,6 +156,8 @@ def assert_definition_invalid(response: Response[Any]) -> dict[str, Any]:
     assert validation_result["findings"]
     assert any(finding.get("node_id") == "prompt" for finding in validation_result["findings"])
     return problem
+
+
 def get_form_prompt(syntara_api: SyntaraApiRegistry, prompt_id: UUID) -> FormPromptRead:
     """GET a form prompt, skipping only on a transient Bad Gateway."""
     return cast(
