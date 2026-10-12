@@ -392,6 +392,26 @@ class TestFormPromptFindingPaths:
         assert finding.category == ValidationCategory.schema_violation
         assert finding.field_path == "parameters.form_definition.fields.0.value_name"
 
+    def test_value_name_containing_default_does_not_change_field_path(self) -> None:
+        workflow_def = _workflow_with_form_prompt(
+            [
+                {
+                    "type": "date",
+                    "value_name": "default_region",
+                    "label": "When",
+                    "include_date": False,
+                    "include_time": False,
+                    "include_timezone": False,
+                }
+            ]
+        )
+
+        result = WorkflowValidator().collect_findings(workflow_def)
+
+        finding = next(f for f in result.findings if f.node_id == "form")
+        assert finding.category == ValidationCategory.form_prompt_configuration
+        assert finding.field_path == "parameters.form_definition.fields.0"
+
     def test_form_definition_error_points_to_invalid_default(self) -> None:
         workflow_def = _workflow_with_form_prompt(
             [

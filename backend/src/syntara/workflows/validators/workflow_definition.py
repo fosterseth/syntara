@@ -561,7 +561,7 @@ def _collect_form_prompt_validation_findings(
         if is_safe_configuration_error and "options source 'dynamic_resolved'" in message:
             # The raw-definition pass reports this with a field index.
             continue
-        field_path = _form_prompt_validation_field_path(error.get("loc", ()), message)
+        field_path = _form_prompt_validation_field_path(error.get("loc", ()))
 
         # JSON Schema already reports ordinary structural errors at this exact
         # location. Keep its finding and avoid a duplicate Pydantic message.
@@ -640,17 +640,13 @@ def _form_field_type_finding(
 
 def _form_prompt_validation_field_path(
     location: tuple[Any, ...] | list[Any],
-    message: str,
 ) -> str:
     """Normalize Pydantic locations into paths rooted at workflow parameters."""
     path_parts = _normalize_form_prompt_location(location)
     if not path_parts:
         return "parameters.form_definition"
 
-    field_path = "parameters." + ".".join(str(part) for part in path_parts)
-    if "default" in message.lower() and isinstance(path_parts[-1], int):
-        field_path += ".default"
-    return field_path
+    return "parameters." + ".".join(str(part) for part in path_parts)
 
 
 def _normalize_form_prompt_location(location: tuple[Any, ...] | list[Any]) -> list[Any]:

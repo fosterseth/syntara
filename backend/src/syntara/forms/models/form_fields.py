@@ -6,7 +6,7 @@ from datetime import date as calendar_date
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Discriminator, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, ValidationInfo, field_validator, model_validator
 
 from syntara.core.constants import FieldLimits
 from syntara.core.exceptions import SafeValueError
@@ -298,17 +298,24 @@ class DropdownField(FormFieldBase):
     options: OptionsSource
     default: str | int | float | bool | None = None
 
-    @model_validator(mode="after")
-    def _default_in_option_list(self) -> DropdownField:
+    @field_validator("default")
+    @classmethod
+    def _default_in_option_list(
+        cls,
+        default: str | int | float | bool | None,
+        info: ValidationInfo,
+    ) -> str | int | float | bool | None:
         """Require a static or resolved default to occur in this field's options."""
-        if self.default is None or not isinstance(self.options, (StaticOptions, ResolvedOptions)):
-            return self
+        options = info.data.get("options")
+        if default is None or not isinstance(options, (StaticOptions, ResolvedOptions)):
+            return default
 
-        valid_values = {option.value for option in self.options.values}
-        if self.default not in valid_values:
-            msg = f"Field '{self.value_name}': default value '{self.default}' is not in the option list"
+        valid_values = {option.value for option in options.values}
+        if default not in valid_values:
+            value_name = info.data.get("value_name", "<unnamed>")
+            msg = f"Field '{value_name}': default value '{default}' is not in the option list"
             raise SafeValueError(msg)
-        return self
+        return default
 
 
 class MultiSelectField(FormFieldBase):
@@ -318,15 +325,22 @@ class MultiSelectField(FormFieldBase):
     options: OptionsSource
     default: list[str | int | float | bool] | None = None
 
-    @model_validator(mode="after")
-    def _defaults_in_option_list(self) -> MultiSelectField:
+    @field_validator("default")
+    @classmethod
+    def _defaults_in_option_list(
+        cls,
+        defaults: list[str | int | float | bool] | None,
+        info: ValidationInfo,
+    ) -> list[str | int | float | bool] | None:
         """Require multi-select defaults to occur in static or resolved options."""
-        if self.default is None or not isinstance(self.options, (StaticOptions, ResolvedOptions)):
-            return self
+        options = info.data.get("options")
+        if defaults is None or not isinstance(options, (StaticOptions, ResolvedOptions)):
+            return defaults
 
-        valid_values = {option.value for option in self.options.values}
-        _check_multi_select_defaults(self.value_name, self.default, valid_values)
-        return self
+        valid_values = {option.value for option in options.values}
+        value_name = info.data.get("value_name", "<unnamed>")
+        _check_multi_select_defaults(value_name, defaults, valid_values)
+        return defaults
 
 
 FormField = Annotated[
