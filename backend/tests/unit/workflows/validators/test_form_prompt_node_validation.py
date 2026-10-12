@@ -5,6 +5,8 @@ import pytest
 from syntara.workflows.models.validation_finding import ValidationCategory, ValidationSeverity
 from syntara.workflows.validators.workflow_definition import WorkflowValidator
 
+_VALID_FORM_DEFINITION = {"fields": [{"type": "text", "value_name": "answer", "label": "Answer"}]}
+
 
 class TestFormPromptPlacementMatrix:
     """AC-3 placement matrix: form nodes are allowed mid-workflow."""
@@ -19,7 +21,7 @@ class TestFormPromptPlacementMatrix:
                 {
                     "id": "form",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                 },
                 {"id": "done", "type": "script", "parameters": {"language": "bash", "code": "echo done"}},
             ],
@@ -42,7 +44,7 @@ class TestFormPromptPlacementMatrix:
                 {
                     "id": "form",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                 },
                 {"id": "script2", "type": "script", "parameters": {"language": "bash", "code": "echo 2"}},
             ],
@@ -66,7 +68,7 @@ class TestFormPromptPlacementMatrix:
                 {
                     "id": "form",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                 },
                 {"id": "done", "type": "script", "parameters": {"language": "bash", "code": "echo done"}},
             ],
@@ -90,7 +92,7 @@ class TestFormPromptPlacementMatrix:
                 {
                     "id": "form",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                 },
             ],
             "edges": [
@@ -113,7 +115,7 @@ class TestFormPromptPlacementMatrix:
                 {
                     "id": "form",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                 },
                 {"id": "done", "type": "script", "parameters": {"language": "bash", "code": "echo done"}},
             ],
@@ -136,12 +138,12 @@ class TestFormPromptPlacementMatrix:
                 {
                     "id": "form1",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                 },
                 {
                     "id": "form2",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                 },
                 {"id": "done", "type": "script", "parameters": {"language": "bash", "code": "echo done"}},
             ],
@@ -164,7 +166,7 @@ class TestFormPromptPlacementMatrix:
                 {
                     "id": "form",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                 },
                 {"id": "script", "type": "script", "parameters": {"language": "bash", "code": "echo 1"}},
                 {"id": "converge", "type": "converge", "parameters": {}},
@@ -192,7 +194,7 @@ class TestFormPromptPlacementNegative:
                 {
                     "id": "form_trigger",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                 }
             ],
             "nodes": [],
@@ -216,7 +218,7 @@ class TestFormPromptPortRules:
                 {
                     "id": "form",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                 }
             ],
             "edges": [{"from": "trigger", "to": "form"}],
@@ -240,7 +242,7 @@ class TestFormPromptPortRules:
                 {
                     "id": "form",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                     "settings": {"continue_on_failure": True},
                 },
             ],
@@ -265,7 +267,7 @@ class TestFormPromptPortRules:
                 {
                     "id": "form",
                     "type": "form_prompt",
-                    "parameters": {"form_definition": {"type": "object"}},
+                    "parameters": {"form_definition": _VALID_FORM_DEFINITION},
                     "settings": {"continue_on_failure": False},
                 },
             ],
