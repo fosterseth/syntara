@@ -464,6 +464,12 @@ def test_validate_collects_multiple_form_field_defects_in_field_order(
     paths = [finding.get("field_path", "") for finding in findings]
     for index in range(3):
         assert any(path.startswith(f"parameters.form_definition.fields.{index}") for path in paths), paths
+    field_indices = [
+        int(path.removeprefix("parameters.form_definition.fields.").split(".", maxsplit=1)[0])
+        for path in paths
+        if path.startswith("parameters.form_definition.fields.")
+    ]
+    assert field_indices == sorted(field_indices)
 
     severities = [finding["severity"] for finding in problem["validation_result"]["findings"]]
     expected_order = ["error"] * problem["validation_result"]["error_count"] + ["warning"] * problem[

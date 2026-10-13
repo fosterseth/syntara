@@ -4,8 +4,11 @@ from typing import Any
 
 import pytest
 
-from syntara.workflows.models.validation_finding import ValidationCategory, ValidationSeverity
-from syntara.workflows.validators.workflow_definition import WorkflowValidator
+from syntara.workflows.models.validation_finding import ValidationCategory, ValidationFinding, ValidationSeverity
+from syntara.workflows.validators.workflow_definition import (
+    WorkflowValidator,
+    _merge_form_prompt_field_findings_by_index,
+)
 
 _VALID_FORM_DEFINITION: dict[str, Any] = {"fields": [{"type": "text", "value_name": "answer", "label": "Answer"}]}
 
@@ -421,6 +424,44 @@ class TestFormPromptFindingPaths:
         finding = next(f for f in result.findings if f.node_id == "form")
         assert finding.category == ValidationCategory.form_prompt_configuration
         assert finding.field_path == "parameters.form_definition.fields.1.default"
+
+    def test_field_findings_are_ordered_without_reordering_non_field_findings(self) -> None:
+        def field_finding(index: int) -> ValidationFinding:
+            return ValidationFinding(
+                severity=ValidationSeverity.error,
+                category=ValidationCategory.schema_violation,
+                message=f"field-{index}",
+                node_id="form",
+                field_path=f"parameters.form_definition.fields.{index}.label",
+            )
+
+        findings = [
+            field_finding(2),
+            ValidationFinding(
+                severity=ValidationSeverity.warning,
+                category=ValidationCategory.form_prompt_configuration,
+                message="prompt warning",
+                node_id="form",
+                field_path="parameters.response_window",
+            ),
+            field_finding(0),
+            ValidationFinding(
+                severity=ValidationSeverity.error,
+                category=ValidationCategory.schema_violation,
+                message="workflow error",
+            ),
+            field_finding(1),
+        ]
+
+        merged = _merge_form_prompt_field_findings_by_index(findings)
+
+        assert [finding.message for finding in merged] == [
+            "field-0",
+            "prompt warning",
+            "field-1",
+            "workflow error",
+            "field-2",
+        ]
 
     def test_dynamic_resolved_source_schema_and_model_errors_are_deduplicated(self) -> None:
         workflow_def = _workflow_with_form_prompt(

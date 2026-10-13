@@ -553,6 +553,37 @@ def _form_prompt_schema_finding_is_redundant(
     )
 
 
+_FORM_PROMPT_FIELDS_PATH_PREFIX = "parameters.form_definition.fields."
+
+
+def _form_prompt_field_index(field_path: str | None) -> int | None:
+    """Get the field index from a form-definition finding path."""
+    if field_path is None or not field_path.startswith(_FORM_PROMPT_FIELDS_PATH_PREFIX):
+        return None
+    index_part = field_path.removeprefix(_FORM_PROMPT_FIELDS_PATH_PREFIX).split(".", maxsplit=1)[0]
+    return int(index_part) if index_part.isdigit() else None
+
+
+def _merge_form_prompt_field_findings_by_index(
+    findings: list[ValidationFinding],
+) -> list[ValidationFinding]:
+    """Order each form node's field findings by index without moving other findings."""
+    findings_by_node: dict[str, list[tuple[int, int, ValidationFinding]]] = defaultdict(list)
+    for position, finding in enumerate(findings):
+        if finding.node_id is None:
+            continue
+        field_index = _form_prompt_field_index(finding.field_path)
+        if field_index is not None:
+            findings_by_node[finding.node_id].append((position, field_index, finding))
+
+    merged = list(findings)
+    for field_findings in findings_by_node.values():
+        ordered = sorted(field_findings, key=lambda item: item[1])
+        for (position, _, _), (_, _, finding) in zip(field_findings, ordered, strict=True):
+            merged[position] = finding
+    return merged
+
+
 def _collect_form_prompt_validation_findings(
     exc: ValidationError,
     node_id: str | None,
@@ -1085,7 +1116,7 @@ class WorkflowValidator:
             findings.extend(form_prompt_findings)
         findings.extend(collect_scheduled_trigger_config_findings(workflow_definition))
 
-        return findings
+        return _merge_form_prompt_field_findings_by_index(findings)
 
     def _collect_schema_findings(self, workflow_definition: dict[str, Any]) -> list[ValidationFinding]:
         """Convert JSON Schema errors into individual ValidationFinding objects."""
