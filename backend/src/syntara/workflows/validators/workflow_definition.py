@@ -20,6 +20,7 @@ from referencing.jsonschema import DRAFT202012
 from syntara.core.constants import JsonbLimits
 from syntara.core.exceptions import SafeValueError
 from syntara.forms.exceptions import FormDefinitionError
+from syntara.forms.models.form_fields import FORM_FIELD_TYPES, OPTIONS_SOURCES
 from syntara.schemas import SCHEMA_DIR
 from syntara.workflows.models.validation_finding import (
     ValidationCategory,
@@ -522,23 +523,34 @@ def _form_prompt_schema_finding_is_redundant(
     schema_finding: ValidationFinding,
     form_prompt_finding: ValidationFinding,
 ) -> bool:
-    """Prefer the form-specific authored-source finding for resolved options."""
-    return (
-        schema_finding.category == ValidationCategory.schema_violation
-        and form_prompt_finding.category == ValidationCategory.form_prompt_configuration
-        and schema_finding.node_id == form_prompt_finding.node_id
+    """Detect known JSON Schema/Pydantic duplicates with different paths."""
+    if (
+        schema_finding.category != ValidationCategory.schema_violation
+        or schema_finding.node_id != form_prompt_finding.node_id
+        or schema_finding.field_path is None
+        or form_prompt_finding.field_path is None
+    ):
+        return False
+
+    # Authored dynamic_resolved options violate the broad options-source enum
+    # and the form model's more specific engine-only rule.
+    if (
+        form_prompt_finding.category == ValidationCategory.form_prompt_configuration
         and form_prompt_finding.message.startswith("Field '")
         and "options source 'dynamic_resolved'" in form_prompt_finding.message
-        and form_prompt_finding.field_path is not None
-        and schema_finding.field_path is not None
         and schema_finding.field_path == f"{form_prompt_finding.field_path}.source"
+    ):
+        return True
+
+    # Missing form_definition is reported at the parameters object by JSON
+    # Schema and at the missing property by Pydantic.
+    return (
+        schema_finding.field_path == "parameters"
+        and "'form_definition' is a required property" in schema_finding.message
+        and form_prompt_finding.category == ValidationCategory.schema_violation
+        and form_prompt_finding.field_path == "parameters.form_definition"
+        and form_prompt_finding.message == "Field required"
     )
-
-
-_FORM_FIELD_VARIANTS = frozenset(
-    {"text", "textarea", "masked_text", "email", "number", "checkbox", "date", "dropdown", "multi_select"}
-)
-_FORM_OPTIONS_VARIANTS = frozenset({"static", "dynamic", "dynamic_resolved"})
 
 
 def _collect_form_prompt_validation_findings(
@@ -659,13 +671,13 @@ def _normalize_form_prompt_location(location: tuple[Any, ...] | list[Any]) -> li
         len(path_parts) > field_type_index
         and path_parts[form_definition_offset] == "fields"
         and isinstance(path_parts[form_definition_offset + 1], int)
-        and path_parts[field_type_index] in _FORM_FIELD_VARIANTS
+        and path_parts[field_type_index] in FORM_FIELD_TYPES
     ):
         path_parts.pop(field_type_index)
 
     if "options" in path_parts:
         options_index = path_parts.index("options")
-        if options_index + 1 < len(path_parts) and path_parts[options_index + 1] in _FORM_OPTIONS_VARIANTS:
+        if options_index + 1 < len(path_parts) and path_parts[options_index + 1] in OPTIONS_SOURCES:
             path_parts.pop(options_index + 1)
     return path_parts
 

@@ -426,6 +426,39 @@ class TestFormPromptFindingPaths:
         assert finding.category == ValidationCategory.form_prompt_configuration
         assert finding.field_path == "parameters.form_definition.fields.1.default"
 
+    def test_dynamic_resolved_source_schema_and_model_errors_are_deduplicated(self) -> None:
+        workflow_def = _workflow_with_form_prompt(
+            [
+                {
+                    "type": "dropdown",
+                    "value_name": "choice",
+                    "label": "Choice",
+                    "options": {
+                        "source": "dynamic_resolved",
+                        "values": [{"display_label": "Choice", "value": "choice"}],
+                    },
+                }
+            ]
+        )
+
+        result = WorkflowValidator().collect_findings(workflow_def)
+
+        form_findings = [finding for finding in result.findings if finding.node_id == "form"]
+        assert len(form_findings) == 1
+        assert form_findings[0].category == ValidationCategory.form_prompt_configuration
+        assert form_findings[0].field_path == "parameters.form_definition.fields.0.options"
+
+    def test_missing_form_definition_schema_and_model_errors_are_deduplicated(self) -> None:
+        workflow_def = _workflow_with_form_prompt(_VALID_FORM_DEFINITION["fields"])
+        del workflow_def["nodes"][0]["parameters"]["form_definition"]
+
+        result = WorkflowValidator().collect_findings(workflow_def)
+
+        form_findings = [finding for finding in result.findings if finding.node_id == "form"]
+        assert len(form_findings) == 1
+        assert form_findings[0].category == ValidationCategory.schema_violation
+        assert form_findings[0].field_path == "parameters.form_definition"
+
 
 @pytest.mark.parametrize(
     ("field", "expected_message"),
