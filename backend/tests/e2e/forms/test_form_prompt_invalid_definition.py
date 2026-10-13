@@ -32,8 +32,7 @@ from ._helpers import (
     assert_definition_invalid,
     assert_problem_response,
 )
-from ._workflows import producer_prompt_consumer_workflow
-from .test_form_prompt_field_type_validation import _ALL_FIELDS
+from ._workflows import ALL_SUPPORTED_FORM_FIELDS, producer_prompt_consumer_workflow
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -535,11 +534,11 @@ def test_valid_multi_field_form_definition_can_be_published(
         cleanup_workflows,
         first_project_id,
         name=name,
-        fields=_ALL_FIELDS,
+        fields=ALL_SUPPORTED_FORM_FIELDS,
     )
     assert workflow.has_validation_issues is False
 
-    valid_response = _validate_definition(syntara_api, name, _ALL_FIELDS)
+    valid_response = _validate_definition(syntara_api, name, ALL_SUPPORTED_FORM_FIELDS)
     valid_result = assert_and_get_with_502_skip(valid_response)
     assert valid_response.status_code == HTTPStatus.OK
     assert isinstance(valid_result, ValidationResult)
