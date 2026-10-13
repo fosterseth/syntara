@@ -7,9 +7,7 @@ import pytest
 from syntara.workflows.models.validation_finding import ValidationCategory, ValidationSeverity
 from syntara.workflows.validators.workflow_definition import WorkflowValidator
 
-_VALID_FORM_DEFINITION: dict[str, Any] = {
-    "fields": [{"type": "text", "value_name": "answer", "label": "Answer"}]
-}
+_VALID_FORM_DEFINITION: dict[str, Any] = {"fields": [{"type": "text", "value_name": "answer", "label": "Answer"}]}
 
 
 def _workflow_with_form_prompt(
@@ -382,9 +380,7 @@ class TestFormPromptFindingPaths:
         assert finding.field_path == "parameters.css_override"
 
     def test_nested_form_field_path_preserves_form_definition_segment(self) -> None:
-        workflow_def = _workflow_with_form_prompt(
-            [{"type": "text", "value_name": "bad name", "label": "Answer"}]
-        )
+        workflow_def = _workflow_with_form_prompt([{"type": "text", "value_name": "bad name", "label": "Answer"}])
 
         result = WorkflowValidator().collect_findings(workflow_def)
 

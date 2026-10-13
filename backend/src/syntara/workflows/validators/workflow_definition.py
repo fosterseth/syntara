@@ -7,8 +7,8 @@ registry retrieve callback and cached for the lifetime of the process.
 """
 
 import json
-from collections.abc import Mapping
 from collections import defaultdict, deque
+from collections.abc import Mapping
 from functools import lru_cache
 from typing import Any
 

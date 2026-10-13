@@ -302,7 +302,7 @@ class DropdownField(FormFieldBase):
     @classmethod
     def _default_in_option_list(
         cls,
-        default: str | int | float | bool | None,
+        default: str | float | bool | None,  # noqa: FBT001
         info: ValidationInfo,
     ) -> str | int | float | bool | None:
         """Require a static or resolved default to occur in this field's options."""
@@ -355,6 +355,13 @@ FormField = Annotated[
     | MultiSelectField,
     Discriminator("type"),
 ]
+
+# Discriminator values for FormField and OptionsSource unions.
+# Used by validators to normalize Pydantic error paths by stripping union tags.
+FORM_FIELD_TYPES = frozenset(
+    {"text", "textarea", "masked_text", "email", "number", "checkbox", "date", "dropdown", "multi_select"}
+)
+OPTIONS_SOURCES = frozenset({"static", "dynamic", "dynamic_resolved"})
 
 
 def _check_multi_select_defaults(
