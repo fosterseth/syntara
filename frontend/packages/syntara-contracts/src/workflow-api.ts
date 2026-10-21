@@ -2588,7 +2588,7 @@ export interface components {
       include_time?: boolean
       /**
        * Include Timezone
-       * @description Collect an IANA timezone name. When include_date is true, include_time is also required.
+       * @description Collect an IANA timezone name.
        * @default false
        */
       include_timezone?: boolean

@@ -160,7 +160,7 @@ class DateField(FormFieldBase):
     )
     include_timezone: bool = Field(
         default=False,
-        description=("Collect an IANA timezone name. When include_date is true, include_time is also required."),
+        description="Collect an IANA timezone name.",
     )
     default: DateValue | None = Field(
         default=None,
@@ -183,7 +183,7 @@ class DateField(FormFieldBase):
 
     @model_validator(mode="after")
     def _check_included_components(self) -> DateField:
-        """Require at least one component and a time when date and timezone are paired."""
+        """Require at least one component. Disallow date + timezone combo."""
         if not self.included_components():
             msg = (
                 f"Field '{self.value_name}': at least one of include_date, "
@@ -191,7 +191,7 @@ class DateField(FormFieldBase):
             )
             raise SafeValueError(msg)
 
-        # A timezone only adds meaning to a date when there is also a time.
+        # Disallow date + timezone combination.
         if self.include_date and self.include_timezone and not self.include_time:
             msg = f"Field '{self.value_name}': include_time is required when include_date and include_timezone are true"
             raise SafeValueError(msg)

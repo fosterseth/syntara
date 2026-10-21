@@ -27,8 +27,7 @@ class DateField:
         required (bool | Unset):  Default: False.
         include_date (bool | Unset): Collect a calendar date. Default: True.
         include_time (bool | Unset): Collect a 24-hour time in HH:MM format. Default: False.
-        include_timezone (bool | Unset): Collect an IANA timezone name. When include_date is true, include_time is also
-            required. Default: False.
+        include_timezone (bool | Unset): Collect an IANA timezone name. Default: False.
         default (DateValue | None | Unset): Default value used when the responder submits nothing. Must supply exactly
             the included components.
     """

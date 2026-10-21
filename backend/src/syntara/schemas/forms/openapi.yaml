@@ -2,7 +2,7 @@
 openapi: 3.1.0
 info:
   title: Orchestrator Forms API
-  version: 1.2.1
+  version: 1.2.2
   description: |
     Form prompts API for the Orchestrator platform.
 
@@ -836,7 +836,7 @@ components:
           type: boolean
           title: Include Timezone
           default: false
-          description: Collect an IANA timezone name. When include_date is true, include_time is also required.
+          description: Collect an IANA timezone name.
         default:
           anyOf:
             - $ref: '#/components/schemas/DateValue'
