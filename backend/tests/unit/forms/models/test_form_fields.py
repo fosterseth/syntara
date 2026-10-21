@@ -333,42 +333,53 @@ class TestDateFieldComponents:
         assert field.included_components() == ("date",)
 
     @pytest.mark.parametrize(
-        ("toggles", "expected"),
+        ("components", "expected"),
         [
-            ({}, ("date",)),
-            ({"include_date": False, "include_time": True}, ("time",)),
-            ({"include_date": False, "include_timezone": True}, ("timezone",)),
-            ({"include_time": True}, ("date", "time")),
-            (
-                {"include_date": False, "include_time": True, "include_timezone": True},
-                ("time", "timezone"),
-            ),
-            ({"include_time": True, "include_timezone": True}, ("date", "time", "timezone")),
+            ((True, False, False), ("date",)),
+            ((False, True, False), ("time",)),
+            ((False, False, True), ("timezone",)),
+            ((True, True, False), ("date", "time")),
+            ((False, True, True), ("time", "timezone")),
+            ((True, True, True), ("date", "time", "timezone")),
         ],
     )
-    def test_valid_combinations(self, toggles: dict[str, bool], expected: tuple[str, ...]) -> None:
+    def test_valid_combinations(self, components: tuple[bool, bool, bool], expected: tuple[str, ...]) -> None:
         """Each valid combination of included components is accepted."""
-        field = DateField.model_validate(_date(**toggles))
+        include_date, include_time, include_timezone = components
+        field = DateField.model_validate(
+            _date(
+                include_date=include_date,
+                include_time=include_time,
+                include_timezone=include_timezone,
+            )
+        )
 
         assert field.included_components() == expected
 
     @pytest.mark.parametrize(
-        ("toggles", "message"),
+        ("components", "message"),
         [
             (
-                {"include_date": False, "include_time": False, "include_timezone": False},
+                (False, False, False),
                 r"at least one of include_date, include_time, or include_timezone must be true",
             ),
             (
-                {"include_date": True, "include_time": False, "include_timezone": True},
-                r"include_time is required when include_date and include_timezone are true",
+                (True, False, True),
+                r"include_date and include_timezone is an invalid combination",
             ),
         ],
     )
-    def test_invalid_combinations(self, toggles: dict[str, bool], message: str) -> None:
+    def test_invalid_combinations(self, components: tuple[bool, bool, bool], message: str) -> None:
         """Empty selections and date plus timezone without time are rejected."""
+        include_date, include_time, include_timezone = components
         with pytest.raises(ValidationError, match=message):
-            DateField.model_validate(_date(**toggles))
+            DateField.model_validate(
+                _date(
+                    include_date=include_date,
+                    include_time=include_time,
+                    include_timezone=include_timezone,
+                )
+            )
 
 
 class TestDateFieldDefault:

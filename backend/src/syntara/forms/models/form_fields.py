@@ -193,7 +193,7 @@ class DateField(FormFieldBase):
 
         # Disallow date + timezone combination.
         if self.include_date and self.include_timezone and not self.include_time:
-            msg = f"Field '{self.value_name}': include_time is required when include_date and include_timezone are true"
+            msg = f"Field '{self.value_name}': include_date and include_timezone is an invalid combination"
             raise SafeValueError(msg)
         return self
 

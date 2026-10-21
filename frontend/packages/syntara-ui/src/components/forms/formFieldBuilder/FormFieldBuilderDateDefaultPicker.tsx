@@ -89,7 +89,6 @@ export function FormFieldBuilderDateDefaultPicker({
                 dateAriaLabel={FORM_FIELD_BUILDER_INITIAL_ANSWER_DATE_ARIA_LABEL}
                 timeAriaLabel="Initial answer time"
                 timezoneAriaLabel="Initial answer time zone"
-                allowEmptyTimezone
               />
               <FormFieldError message={componentsError} error={fieldState.error} />
             </>

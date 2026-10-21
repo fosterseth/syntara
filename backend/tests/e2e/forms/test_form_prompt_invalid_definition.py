@@ -284,7 +284,7 @@ def test_publish_rejects_invalid_form_definition_and_it_cannot_run_as_published(
             "at least one of include_date, include_time, or include_timezone must be true",
         ),
         (
-            "date_timezone_requires_time",
+            "date_timezone_invalid_combination",
             [
                 {
                     "type": "date",
@@ -295,7 +295,7 @@ def test_publish_rejects_invalid_form_definition_and_it_cannot_run_as_published(
             ],
             "form_prompt_configuration",
             "parameters.form_definition.fields.0",
-            "include_time is required when include_date and include_timezone are true",
+            "include_date and include_timezone is an invalid combination",
         ),
         (
             "invalid_calendar_date_default",

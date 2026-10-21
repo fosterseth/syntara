@@ -5,10 +5,11 @@ import { axe } from 'vitest-axe'
 import { FormTimezoneSelect } from './FormTimezoneSelect'
 
 describe('FormTimezoneSelect', () => {
-  it('renders timezone select toggle', () => {
+  it('renders the selected timezone in the typeahead input', () => {
     render(<FormTimezoneSelect id="tz-select" value="America/New_York" onChange={vi.fn()} ariaLabel="Time zone" />)
 
-    expect(screen.getByRole('button', { name: 'Time zone' })).toHaveTextContent('America/New_York')
+    expect(screen.getByRole('textbox', { name: 'Time zone' })).toHaveValue('America/New_York')
+    expect(screen.getByRole('button', { name: 'Clear time zone' })).toBeInTheDocument()
   })
 
   it('has no accessibility violations', async () => {

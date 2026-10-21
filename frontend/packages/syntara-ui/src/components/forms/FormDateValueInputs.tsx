@@ -19,7 +19,6 @@ type FormDateValueInputsProps = Readonly<{
   dateAriaLabel?: string
   timeAriaLabel?: string
   timezoneAriaLabel?: string
-  allowEmptyTimezone?: boolean
 }>
 
 function readComponent(value: DateValueShape | null | undefined, name: DateComponentName): string {
@@ -66,7 +65,6 @@ export function FormDateValueInputs({
   dateAriaLabel = 'Date',
   timeAriaLabel = 'Time',
   timezoneAriaLabel = 'Time zone',
-  allowEmptyTimezone = false,
 }: FormDateValueInputsProps) {
   const showDate = included.includes('date')
   const showTime = included.includes('time')
@@ -148,7 +146,6 @@ export function FormDateValueInputs({
             onChange={(tz) => onChange(mergeComponent(value, 'timezone', tz, included))}
             isDisabled={isDisabled}
             ariaLabel={timezoneAriaLabel}
-            allowEmpty={allowEmptyTimezone}
           />
         </StackItem>
       )}
