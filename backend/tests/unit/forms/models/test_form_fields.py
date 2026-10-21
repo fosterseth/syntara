@@ -336,9 +336,14 @@ class TestDateFieldComponents:
         ("toggles", "expected"),
         [
             ({}, ("date",)),
-            ({"include_time": True}, ("date", "time")),
             ({"include_date": False, "include_time": True}, ("time",)),
             ({"include_date": False, "include_timezone": True}, ("timezone",)),
+            ({"include_time": True}, ("date", "time")),
+            (
+                {"include_date": False, "include_time": True, "include_timezone": True},
+                ("time", "timezone"),
+            ),
+            ({"include_time": True, "include_timezone": True}, ("date", "time", "timezone")),
         ],
     )
     def test_valid_combinations(self, toggles: dict[str, bool], expected: tuple[str, ...]) -> None:
@@ -348,21 +353,22 @@ class TestDateFieldComponents:
         assert field.included_components() == expected
 
     @pytest.mark.parametrize(
-        "toggles",
-        [{"include_time": True}],
+        ("toggles", "message"),
+        [
+            (
+                {"include_date": False, "include_time": False, "include_timezone": False},
+                r"at least one of include_date, include_time, or include_timezone must be true",
+            ),
+            (
+                {"include_date": True, "include_time": False, "include_timezone": True},
+                r"include_time is required when include_date and include_timezone are true",
+            ),
+        ],
     )
-    def test_date_and_timezone_requires_time(self, toggles: dict[str, bool]) -> None:
-        """A timezone does not apply to a date without a time."""
-        with pytest.raises(
-            ValidationError,
-            match=r"include_time is required when include_date and include_timezone are true",
-        ):
+    def test_invalid_combinations(self, toggles: dict[str, bool], message: str) -> None:
+        """Empty selections and date plus timezone without time are rejected."""
+        with pytest.raises(ValidationError, match=message):
             DateField.model_validate(_date(**toggles))
-
-    def test_at_least_one_component_required(self) -> None:
-        """A field that collects nothing cannot be answered at all."""
-        with pytest.raises(ValidationError, match=r"at least one of include_date"):
-            DateField.model_validate(_date(include_date=False))
 
 
 class TestDateFieldDefault:
