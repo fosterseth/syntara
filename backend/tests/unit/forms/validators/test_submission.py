@@ -421,19 +421,14 @@ class TestDateFieldSubmission:
         [
             ({}, {"date": "2026-01-05"}, "2026-01-05"),
             (
-                {"include_timezone": True},
-                {"date": "2026-01-05", "timezone": "America/New_York"},
-                "2026-01-05",
+                {"include_time": True},
+                {"date": "2026-01-05", "time": "14:30"},
+                "2026-01-05T14:30:00",
             ),
             (
-                {"include_time": True, "include_timezone": True},
-                {"date": "2026-01-05", "time": "14:30", "timezone": "America/New_York"},
-                "2026-01-05T14:30:00-05:00",
-            ),
-            (
-                {"include_date": False, "include_time": True, "include_timezone": True},
-                {"time": "14:30", "timezone": "America/New_York"},
-                "14:30:00-05:00",
+                {"include_date": False, "include_time": True},
+                {"time": "14:30"},
+                "14:30:00",
             ),
             (
                 {"include_date": False, "include_timezone": True},
@@ -448,7 +443,7 @@ class TestDateFieldSubmission:
         submitted: dict[str, str],
         expected: str,
     ) -> None:
-        """Every date field component combination produces a single string."""
+        """Every valid date field component combination produces a single string."""
         cleaned = validate_form_submission(self._date_form(**toggles), {"start": submitted})
 
         assert cleaned["start"] == expected

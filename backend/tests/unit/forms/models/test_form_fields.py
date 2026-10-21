@@ -336,28 +336,27 @@ class TestDateFieldComponents:
         ("toggles", "expected"),
         [
             ({}, ("date",)),
-            ({"include_timezone": True}, ("date", "timezone")),
-            ({"include_time": True, "include_timezone": True}, ("date", "time", "timezone")),
-            ({"include_date": False, "include_time": True, "include_timezone": True}, ("time", "timezone")),
+            ({"include_time": True}, ("date", "time")),
+            ({"include_date": False, "include_time": True}, ("time",)),
             ({"include_date": False, "include_timezone": True}, ("timezone",)),
         ],
     )
     def test_valid_combinations(self, toggles: dict[str, bool], expected: tuple[str, ...]) -> None:
-        """Every combination that pairs a time with a timezone is accepted."""
+        """Each valid combination of included components is accepted."""
         field = DateField.model_validate(_date(**toggles))
 
         assert field.included_components() == expected
 
     @pytest.mark.parametrize(
         "toggles",
-        [
-            {"include_time": True},
-            {"include_date": False, "include_time": True},
-        ],
+        [{"include_time": True}],
     )
-    def test_time_requires_timezone(self, toggles: dict[str, bool]) -> None:
-        """A wall-clock time is ambiguous without the zone it is read in."""
-        with pytest.raises(ValidationError, match=r"include_timezone is required when include_time is true"):
+    def test_date_and_timezone_requires_time(self, toggles: dict[str, bool]) -> None:
+        """A timezone does not apply to a date without a time."""
+        with pytest.raises(
+            ValidationError,
+            match=r"include_time is required when include_date and include_timezone are true",
+        ):
             DateField.model_validate(_date(**toggles))
 
     def test_at_least_one_component_required(self) -> None:
@@ -392,7 +391,7 @@ class TestDateFieldDefault:
     def test_partial_default_rejected(self) -> None:
         """A default is substituted wholesale, so an incomplete one is useless."""
         with pytest.raises(ValidationError, match=r"default is missing timezone"):
-            DateField.model_validate(_date(include_timezone=True, default={"date": "2026-01-05"}))
+            DateField.model_validate(_date(include_date=False, include_timezone=True, default={}))
 
     def test_default_for_uncollected_component_rejected(self) -> None:
         """Defaulting a component the field never asks for is an authoring mistake."""

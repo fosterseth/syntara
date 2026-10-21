@@ -365,9 +365,10 @@ def _coerce_date(field: DateField, raw: Any) -> str:  # noqa: ANN401
     Returns a single string for every component combination. A date/time/timezone
     field is returned as an ISO 8601 datetime string using the offset for that
     date. A date without a time is returned as an ISO 8601 date string. A
-    time/timezone field without a date is returned as an ISO 8601 time string
-    using the timezone's standard offset, so the offset does not shift for DST.
-    A timezone-only field returns its IANA timezone name.
+    A date/time combination without a timezone is returned as a local ISO 8601
+    datetime with no offset. A time without a date is returned as an ISO 8601
+    time string, with a timezone's standard offset when one is included. The
+    offset does not shift for DST. A timezone-only field returns its IANA name.
 
     Args:
         field: Date field definition, which decides the required components
@@ -388,7 +389,9 @@ def _coerce_date(field: DateField, raw: Any) -> str:  # noqa: ANN401
             return _format_datetime_value(value)
         return _require_date_component(value)
     if field.include_time:
-        return _format_time_with_standard_offset(value)
+        if field.include_timezone:
+            return _format_time_with_standard_offset(value)
+        return _require_time_component(value)
     return _require_timezone_component(value)
 
 
@@ -428,11 +431,13 @@ def _parse_and_validate_date_value(field: DateField, raw: Any) -> DateValue:  # 
 
 
 def _format_datetime_value(value: DateValue) -> str:
-    """Return a date/time response using the offset for that date."""
-    if value.date is None or value.time is None or value.timezone is None:
-        msg = "Missing required components: date, time, timezone"
+    """Return a date/time response with an offset when a timezone is included."""
+    if value.date is None or value.time is None:
+        msg = "Missing required components: date, time"
         raise _FormatError(msg)
     local_datetime = datetime.fromisoformat(f"{value.date}T{value.time}")
+    if value.timezone is None:
+        return local_datetime.isoformat()
     return local_datetime.replace(tzinfo=ZoneInfo(value.timezone)).isoformat()
 
 
@@ -442,6 +447,14 @@ def _require_date_component(value: DateValue) -> str:
         msg = "Missing required component: date"
         raise _FormatError(msg)
     return value.date
+
+
+def _require_time_component(value: DateValue) -> str:
+    """Return the ISO 8601 time component without a timezone offset."""
+    if value.time is None:
+        msg = "Missing required component: time"
+        raise _FormatError(msg)
+    return time.fromisoformat(value.time).isoformat()
 
 
 def _format_time_with_standard_offset(value: DateValue) -> str:

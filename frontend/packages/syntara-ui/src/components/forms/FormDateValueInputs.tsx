@@ -77,7 +77,11 @@ export function FormDateValueInputs({
 
   const handleTimeChange = useCallback<NonNullable<TimePickerProps['onChange']>>(
     (...args) => {
-      const [, , hour, minute, , isValid] = args
+      const [, time, hour, minute, , isValid] = args
+      if (time.trim() === '') {
+        onChange(mergeComponent(value, 'time', '', included))
+        return
+      }
       if (!isValid || hour == null || minute == null) {
         return
       }

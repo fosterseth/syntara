@@ -1,2 +1,3 @@
-/** Shown in the form builder when time is included without a time zone. */
-export const DATE_FIELD_TIME_REQUIRES_TIMEZONE_MESSAGE = 'Timezone must be set when time is selected'
+/** Shown in the form builder when a date and timezone are included without a time. */
+export const DATE_FIELD_DATE_AND_TIMEZONE_REQUIRES_TIME_MESSAGE =
+  'Time must be included when both date and timezone are selected'

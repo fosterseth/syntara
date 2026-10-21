@@ -147,7 +147,7 @@ class DateValue(BaseModel):
 # the field may be skipped entirely is the inherited `required` flag, exactly as
 # for every other field type.
 class DateField(FormFieldBase):
-    """Date field collecting any combination of date, time, and timezone."""
+    """Date field collecting a valid combination of date, time, and timezone."""
 
     type: Literal["date"]
     include_date: bool = Field(
@@ -156,11 +156,11 @@ class DateField(FormFieldBase):
     )
     include_time: bool = Field(
         default=False,
-        description="Collect a 24-hour time. Requires include_timezone.",
+        description="Collect a 24-hour time.",
     )
     include_timezone: bool = Field(
         default=False,
-        description="Collect an IANA timezone name.",
+        description=("Collect an IANA timezone name. When include_date is true, include_time is also required."),
     )
     default: DateValue | None = Field(
         default=None,
@@ -183,7 +183,7 @@ class DateField(FormFieldBase):
 
     @model_validator(mode="after")
     def _check_included_components(self) -> DateField:
-        """Require at least one component, and a timezone alongside any time."""
+        """Require at least one component and a time when date and timezone are paired."""
         if not self.included_components():
             msg = (
                 f"Field '{self.value_name}': at least one of include_date, "
@@ -191,9 +191,9 @@ class DateField(FormFieldBase):
             )
             raise SafeValueError(msg)
 
-        # A bare wall-clock time is ambiguous without the zone it is read in.
-        if self.include_time and not self.include_timezone:
-            msg = f"Field '{self.value_name}': include_timezone is required when include_time is true"
+        # A timezone only adds meaning to a date when there is also a time.
+        if self.include_date and self.include_timezone and not self.include_time:
+            msg = f"Field '{self.value_name}': include_time is required when include_date and include_timezone are true"
             raise SafeValueError(msg)
         return self
 
