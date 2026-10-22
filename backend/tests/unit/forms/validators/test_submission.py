@@ -1,7 +1,7 @@
 """Unit tests for form submission validation and coercion."""
 
 from datetime import datetime, tzinfo
-from typing import Any, get_args
+from typing import Any, Self, get_args
 
 import pytest
 
@@ -468,7 +468,7 @@ class TestDateFieldSubmission:
 
         class SummerDateTime(datetime):
             @classmethod
-            def now(cls, tz: tzinfo | None = None) -> datetime:
+            def now(cls, tz: tzinfo | None = None) -> Self:
                 return cls(2026, 7, 1, 12, tzinfo=tz)
 
         monkeypatch.setattr(submission_module, "datetime", SummerDateTime)
