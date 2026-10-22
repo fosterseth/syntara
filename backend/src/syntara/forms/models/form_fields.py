@@ -156,7 +156,7 @@ class DateField(FormFieldBase):
     )
     include_time: bool = Field(
         default=False,
-        description="Collect a 24-hour time.",
+        description="Collect a 24-hour time in HH:MM format.",
     )
     include_timezone: bool = Field(
         default=False,
