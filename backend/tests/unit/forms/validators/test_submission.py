@@ -69,7 +69,7 @@ class TestSubmissionFlow:
             form, {"name": "bob", "age": 30, "subscribe": True, "start": {"date": "2026-01-05"}}
         )
 
-        assert cleaned == {"name": "bob", "age": 30, "subscribe": True, "start": {"date": "2026-01-05"}}
+        assert cleaned == {"name": "bob", "age": 30, "subscribe": True, "start": "2026-01-05"}
 
     def test_absent_optional_key_omitted(self) -> None:
         """An absent optional field is omitted entirely, not set to None."""
