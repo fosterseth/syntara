@@ -7,7 +7,7 @@ import pytest
 
 import syntara.forms.validators.submission as submission_module
 from syntara.forms.exceptions import FormDataValidationError
-from syntara.forms.models.form_fields import FormDefinition, FormField
+from syntara.forms.models.form_fields import DateValue, FormDefinition, FormField
 from syntara.forms.validators.submission import validate_form_submission
 
 _STATIC_OPTIONS: dict[str, Any] = {
@@ -480,6 +480,21 @@ class TestDateFieldSubmission:
         )
 
         assert cleaned["start"] == expected
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            DateValue(time="14:30"),
+            DateValue(timezone="UTC"),
+        ],
+    )
+    def test_time_with_standard_offset_rejects_missing_component(self, value: DateValue) -> None:
+        with pytest.raises(ValueError, match=r"Missing required components: time, timezone"):
+            submission_module._format_time_with_standard_offset(value)
+
+    def test_time_component_formatter_rejects_missing_time(self) -> None:
+        with pytest.raises(ValueError, match=r"Missing required component: time"):
+            submission_module._require_time_component(DateValue())
 
     def test_missing_component_rejected(self) -> None:
         """Every included component is mandatory once the field is answered."""
