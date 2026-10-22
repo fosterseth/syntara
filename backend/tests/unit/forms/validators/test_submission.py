@@ -1,9 +1,11 @@
 """Unit tests for form submission validation and coercion."""
 
+from datetime import datetime, tzinfo
 from typing import Any, get_args
 
 import pytest
 
+import syntara.forms.validators.submission as submission_module
 from syntara.forms.exceptions import FormDataValidationError
 from syntara.forms.models.form_fields import FormDefinition, FormField
 from syntara.forms.validators.submission import validate_form_submission
@@ -445,6 +447,37 @@ class TestDateFieldSubmission:
     ) -> None:
         """Every valid date field component combination produces a single string."""
         cleaned = validate_form_submission(self._date_form(**toggles), {"start": submitted})
+
+        assert cleaned["start"] == expected
+
+    @pytest.mark.parametrize(
+        ("timezone_name", "expected"),
+        [
+            ("UTC", "14:30:00+00:00"),
+            ("America/New_York", "14:30:00-05:00"),
+            ("Asia/Kolkata", "14:30:00+05:30"),
+        ],
+    )
+    def test_time_without_date_uses_timezone_standard_offset(
+        self,
+        timezone_name: str,
+        expected: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Time-only values use standard offset, even during daylight saving time."""
+
+        class SummerDateTime(datetime):
+            @classmethod
+            def now(cls, tz: tzinfo | None = None) -> datetime:
+                return cls(2026, 7, 1, 12, tzinfo=tz)
+
+        monkeypatch.setattr(submission_module, "datetime", SummerDateTime)
+        form = self._date_form(include_date=False, include_time=True, include_timezone=True)
+
+        cleaned = validate_form_submission(
+            form,
+            {"start": {"time": "14:30", "timezone": timezone_name}},
+        )
 
         assert cleaned["start"] == expected
 
