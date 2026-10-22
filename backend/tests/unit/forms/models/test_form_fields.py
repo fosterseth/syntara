@@ -365,7 +365,7 @@ class TestDateFieldComponents:
             ),
             (
                 (True, False, True),
-                r"include_date and include_timezone is an invalid combination",
+                r"Select a time when both a date and timezone are included\.",
             ),
         ],
     )

@@ -295,7 +295,7 @@ def test_publish_rejects_invalid_form_definition_and_it_cannot_run_as_published(
             ],
             "form_prompt_configuration",
             "parameters.form_definition.fields.0",
-            "include_date and include_timezone is an invalid combination",
+            "Select a time when both a date and timezone are included.",
         ),
         (
             "invalid_calendar_date_default",

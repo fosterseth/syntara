@@ -4,11 +4,7 @@ import { FormProvider, useForm } from 'react-hook-form'
 import { describe, expect, it, vi } from 'vitest'
 import { axe } from 'vitest-axe'
 
-import {
-  DATE_FIELD_DATE_AND_TIMEZONE_REQUIRES_TIME_MESSAGE,
-  FormFieldTypeEnum,
-  parseFormDefinition,
-} from '../../../forms'
+import { FormFieldTypeEnum, parseFormDefinition } from '../../../forms'
 
 import { FormFieldBuilderCommitContext } from './formFieldBuilderCommitContext'
 import { FormFieldBuilderDateShowInFormSection } from './FormFieldBuilderDateShowInFormSection'
@@ -57,7 +53,7 @@ describe('FormFieldBuilderDateShowInFormSection', () => {
 
     await user.click(screen.getByRole('checkbox', { name: 'Timezone' }))
 
-    expect(screen.getByText(DATE_FIELD_DATE_AND_TIMEZONE_REQUIRES_TIME_MESSAGE)).toBeInTheDocument()
+    expect(screen.getByText('Select a time when both a date and timezone are included.')).toBeInTheDocument()
   })
 
   it('allows time without timezone after date is unchecked', async () => {

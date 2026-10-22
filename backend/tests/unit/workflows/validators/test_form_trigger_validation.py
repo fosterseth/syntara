@@ -205,7 +205,7 @@ def test_date_component_rules_are_reported_on_the_field() -> None:
 
     assert finding.category == ValidationCategory.form_trigger_configuration
     assert finding.field_path == "parameters.form_definition.fields.0"
-    assert "include_date and include_timezone is an invalid combination" in finding.message
+    assert "Select a time when both a date and timezone are included." in finding.message
 
 
 def test_default_that_fails_submission_coercion_is_reported_at_default() -> None:
