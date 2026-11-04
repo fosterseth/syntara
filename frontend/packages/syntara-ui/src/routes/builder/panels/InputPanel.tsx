@@ -25,12 +25,14 @@ import type { WorkflowMetadata } from '../types/workflowMetadata'
 import { useIsVersionView } from '../VersionViewContext'
 
 import { useUpstreamNodes, type UpstreamNodeInfo } from './hooks/useUpstreamNodes'
+import { useResolvedNodeOutputSchemas } from './hooks/useResolvedNodeOutputSchemas'
 import { InputEmptyState } from './InputEmptyState'
 import { InputNodeContent, InputPanelNodeSection } from './InputNodeContent'
 import { MockDataEditor } from './MockDataEditor'
 import styles from './panels.module.css'
 import { getUpstreamNodeDisplayName } from './utils/getUpstreamNodeDisplayName'
 import { buildMockJsonSkeleton } from './utils/mockDataUtils'
+import { buildJsonSchemaMockSkeleton, buildMappedOutputFallbackSchema } from './utils/schemaToPreviewFields'
 import { getTriggerInputSchemaFields } from './utils/triggerSchemaUtils'
 import { VariablesAndContextTree } from './VariablesAndContextTree'
 import { ViewToggle, type PanelView } from './ViewToggle'
@@ -49,8 +51,8 @@ function computeEffectiveUpstream(params: {
   upstreamNodes: UpstreamNodeInfo[]
   sourceNodeId: string | null | undefined
   sourceAncestors: UpstreamNodeInfo[]
-  activities: { id: string; name?: string; type: string }[] | undefined
-  triggers: { id: string; name?: string; type: string }[] | undefined
+  activities: { id: string; name?: string; type: string; outputs?: Record<string, string> }[] | undefined
+  triggers: { id: string; name?: string; type: string; outputs?: Record<string, string> }[] | undefined
 }): UpstreamNodeInfo[] {
   const { upstreamNodes, sourceNodeId, sourceAncestors, activities, triggers } = params
   if (upstreamNodes.length > 0) return upstreamNodes
@@ -58,18 +60,42 @@ function computeEffectiveUpstream(params: {
 
   const activity = activities?.find((a) => a.id === sourceNodeId)
   if (activity) {
-    return [{ id: activity.id, name: activity.name ?? activity.id, type: activity.type }, ...sourceAncestors]
+    return [
+      {
+        id: activity.id,
+        name: activity.name ?? activity.id,
+        type: activity.type,
+        ...(activity.outputs === undefined ? {} : { outputs: activity.outputs }),
+      },
+      ...sourceAncestors,
+    ]
   }
 
   const trigger = triggers?.find((t) => t.id === sourceNodeId)
   if (trigger) {
-    return [{ id: trigger.id, name: trigger.name ?? trigger.id, type: trigger.type }, ...sourceAncestors]
+    return [
+      {
+        id: trigger.id,
+        name: trigger.name ?? trigger.id,
+        type: trigger.type,
+        ...(trigger.outputs === undefined ? {} : { outputs: trigger.outputs }),
+      },
+      ...sourceAncestors,
+    ]
   }
 
   const triggerIndex = parseTriggerIndex(sourceNodeId)
   if (triggerIndex !== undefined && triggers?.[triggerIndex]) {
     const resolved = triggers[triggerIndex]
-    return [{ id: resolved.id, name: resolved.name ?? resolved.id, type: resolved.type }, ...sourceAncestors]
+    return [
+      {
+        id: resolved.id,
+        name: resolved.name ?? resolved.id,
+        type: resolved.type,
+        ...(resolved.outputs === undefined ? {} : { outputs: resolved.outputs }),
+      },
+      ...sourceAncestors,
+    ]
   }
 
   return []
@@ -107,8 +133,10 @@ function computeMergedExecutionData(
 function getInputMockSkeleton(
   predecessorId: string,
   effectiveUpstream: UpstreamNodeInfo[],
-  triggers: { id: string; parameters?: Record<string, unknown> }[] | undefined
+  triggers: { id: string; parameters?: Record<string, unknown> }[] | undefined,
+  outputSchema?: unknown
 ): string {
+  if (outputSchema) return buildJsonSchemaMockSkeleton(outputSchema)
   const node = effectiveUpstream.find((n) => n.id === predecessorId)
   if (!node) return '{}'
   return buildMockJsonSkeleton(node.type, getTriggerInputSchemaFields(predecessorId, triggers))
@@ -267,6 +295,8 @@ export function InputPanel({
   const sourceAncestors = useUpstreamNodes(sourceNodeId ?? '')
   const activities = useWorkflowStore(selectActivities)
   const triggers = useWorkflowStore(selectTriggers)
+  const outputSchemaQuery = useResolvedNodeOutputSchemas()
+  const isResolvingFormOutputSchemas = outputSchemaQuery.nodes.length > 0
 
   const effectiveUpstream = useMemo(
     () => computeEffectiveUpstream({ upstreamNodes, sourceNodeId, sourceAncestors, activities, triggers }),
@@ -325,9 +355,14 @@ export function InputPanel({
     const existingMock = nodeInputMocks?.[editingPredecessorId]
     const executionOrUpstreamData = mergedExecutionData?.[editingPredecessorId]
     const dataToStringify = existingMock ?? executionOrUpstreamData
+    const outputSchemaEntry = outputSchemaQuery.nodeOutputSchemas[editingPredecessorId]
+    const resolvedOutputSchema =
+      outputSchemaEntry?.status === 'available'
+        ? outputSchemaEntry.output_schema
+        : buildMappedOutputFallbackSchema(editingNode?.type ?? '', editingNode?.outputs)
     const initialJson = dataToStringify
       ? JSON.stringify(dataToStringify, null, 2)
-      : getInputMockSkeleton(editingPredecessorId, effectiveUpstream, triggers)
+      : getInputMockSkeleton(editingPredecessorId, effectiveUpstream, triggers, resolvedOutputSchema)
 
     return (
       <MockDataEditor
@@ -432,6 +467,18 @@ export function InputPanel({
                         searchTerm={searchTerm}
                         onRunPreviousSteps={onRunPreviousSteps}
                         workflowId={workflowId}
+                        outputSchemaEntry={outputSchemaQuery.nodeOutputSchemas[upstreamNode.id]}
+                        isResolvingOutputSchema={
+                          isResolvingFormOutputSchemas &&
+                          (upstreamNode.type === 'form_prompt' || upstreamNode.type === 'form_trigger') &&
+                          outputSchemaQuery.isPending
+                        }
+                        outputSchemaError={
+                          upstreamNode.type === 'form_prompt' || upstreamNode.type === 'form_trigger'
+                            ? outputSchemaQuery.error
+                            : undefined
+                        }
+                        onRetryOutputSchema={() => void outputSchemaQuery.retry()}
                       />
                     </InputPanelNodeSection>
                   </ExpandableSection>

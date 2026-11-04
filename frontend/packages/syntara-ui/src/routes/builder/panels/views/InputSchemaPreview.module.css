@@ -9,3 +9,7 @@
   margin-bottom: var(--pf-t--global--spacer--sm);
   color: var(--pf-t--global--color--200);
 }
+
+.schemaDescription {
+  margin-bottom: var(--pf-t--global--spacer--sm);
+}

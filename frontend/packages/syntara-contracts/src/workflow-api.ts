@@ -4,6 +4,31 @@
  */
 
 export interface paths {
+  '/workflows/output-schemas': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Resolve workflow node output schemas
+     * @description Resolve expected output schemas for the supplied draft nodes without saving a workflow.
+     *
+     *     Requires authentication but no workflow/project permission because this is a stateless,
+     *     side-effect-free operation over caller-supplied node configuration. Form definitions are
+     *     parsed locally; expressions, dynamic option queries, integrations, and workflow activities
+     *     are never evaluated.
+     */
+    post: operations['resolve_workflow_output_schemas']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/workflows': {
     parameters: {
       query?: never
@@ -536,6 +561,10 @@ export interface components {
       workflow_definition: {
         [key: string]: unknown
       }
+      /** @description Read-only output schemas derived from configured form nodes, keyed by actual node ID. */
+      readonly node_output_schemas?: {
+        [key: string]: components['schemas']['NodeOutputSchemaEntry']
+      }
       /** Change Description */
       change_description?: string | null
       /**
@@ -565,6 +594,41 @@ export interface components {
        * Format: date-time
        */
       updated_at: string
+    }
+    /**
+     * WorkflowOutputSchemaNode
+     * @description Bounded partial node configuration used for stateless output schema resolution.
+     */
+    WorkflowOutputSchemaNode: {
+      id: string
+      type: string
+      /** @description Incomplete node parameters are accepted so findings can be returned per node. */
+      parameters?: {
+        [key: string]: unknown
+      }
+      /** @description Optional output extraction mapping. */
+      outputs?: {
+        [key: string]: string
+      } | null
+    }
+    /** WorkflowOutputSchemasRequest */
+    WorkflowOutputSchemasRequest: {
+      nodes: components['schemas']['WorkflowOutputSchemaNode'][]
+    }
+    /** NodeOutputSchemaEntry */
+    NodeOutputSchemaEntry: {
+      /** @enum {string} */
+      status: 'available' | 'invalid' | 'unsupported'
+      output_schema?: {
+        [key: string]: unknown
+      } | null
+      findings: components['schemas']['ValidationFinding'][]
+    }
+    /** WorkflowOutputSchemasResponse */
+    WorkflowOutputSchemasResponse: {
+      node_output_schemas: {
+        [key: string]: components['schemas']['NodeOutputSchemaEntry']
+      }
     }
     /**
      * PublishVersionRequest
@@ -2351,34 +2415,6 @@ export interface components {
       validation_result: components['schemas']['ValidationResult']
     }
     /**
-     * UserReferenceType
-     * @description Kind of principal a UserReference points at.
-     *
-     *     Only ``user`` references have a user detail page. ``deleted_user`` and
-     *     ``deleted_service_account`` mark principals that were hard-deleted but are
-     *     still recorded as the actor.
-     * @enum {string}
-     */
-    UserReferenceType: 'user' | 'service_account' | 'service' | 'system' | 'deleted_user' | 'deleted_service_account'
-    /**
-     * UserReference
-     * @description Minimal user identification for embedding in other resources.
-     *     The name is resolved from the database when the response is built, not
-     *     stored alongside the id, so it always reflects the principal's current
-     *     name. Renaming a user therefore changes the name shown for their past actions.
-     */
-    UserReference: {
-      /**
-       * Format: uuid
-       * @description User's unique identifier
-       */
-      id: string
-      /** @description Principal's current display name, resolved when the response is built. Not a username: for a user this is their first and last name, falling back to the username when both are blank; for a service account it is the account name; for an internal service it is derived from the certificate CN. */
-      name: string
-      /** @description Kind of principal this reference points at. Only `user` references have a user detail page; `deleted_user` / `deleted_service_account` are hard-deleted principals that are still recorded as the actor. */
-      type: components['schemas']['UserReferenceType']
-    }
-    /**
      * ErrorData
      * @description RFC 9457 Problem Details format for error event data.
      *     This model is used for streaming error events and follows the RFC 9457 Problem Details specification. It provides machine-readable and human-readable error information with consistent structure.
@@ -2443,6 +2479,34 @@ export interface components {
        * @example /invocations/550e8400-e29b-41d4-a716-446655440000
        */
       instance?: string | null
+    }
+    /**
+     * UserReferenceType
+     * @description Kind of principal a UserReference points at.
+     *
+     *     Only ``user`` references have a user detail page. ``deleted_user`` and
+     *     ``deleted_service_account`` mark principals that were hard-deleted but are
+     *     still recorded as the actor.
+     * @enum {string}
+     */
+    UserReferenceType: 'user' | 'service_account' | 'service' | 'system' | 'deleted_user' | 'deleted_service_account'
+    /**
+     * UserReference
+     * @description Minimal user identification for embedding in other resources.
+     *     The name is resolved from the database when the response is built, not
+     *     stored alongside the id, so it always reflects the principal's current
+     *     name. Renaming a user therefore changes the name shown for their past actions.
+     */
+    UserReference: {
+      /**
+       * Format: uuid
+       * @description User's unique identifier
+       */
+      id: string
+      /** @description Principal's current display name, resolved when the response is built. Not a username: for a user this is their first and last name, falling back to the username when both are blank; for a service account it is the account name; for an internal service it is derived from the certificate CN. */
+      name: string
+      /** @description Kind of principal this reference points at. Only `user` references have a user detail page; `deleted_user` / `deleted_service_account` are hard-deleted principals that are still recorded as the actor. */
+      type: components['schemas']['UserReferenceType']
     }
     /**
      * TextField
@@ -2808,6 +2872,42 @@ export interface components {
         'application/problem+json': components['schemas']['ErrorData']
       }
     }
+    /** @description Too Many Requests */
+    RateLimitError: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        /**
+         * @example {
+         *       "type": "https://api.example.com/errors/rate-limited",
+         *       "title": "Too Many Requests",
+         *       "detail": "Rate limit exceeded. Try again in 60 seconds.",
+         *       "code": "RATE_LIMITED",
+         *       "retryable": true
+         *     }
+         */
+        'application/problem+json': components['schemas']['ErrorData']
+      }
+    }
+    /** @description Internal Server Error */
+    InternalServerError: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        /**
+         * @example {
+         *       "type": "https://api.example.com/errors/internal-error",
+         *       "title": "Internal Server Error",
+         *       "detail": "An unexpected error occurred",
+         *       "code": "INTERNAL_ERROR",
+         *       "retryable": true
+         *     }
+         */
+        'application/problem+json': components['schemas']['ErrorData']
+      }
+    }
     /** @description Forbidden */
     ForbiddenError: {
       headers: {
@@ -2882,42 +2982,6 @@ export interface components {
         'application/problem+json': components['schemas']['ErrorData']
       }
     }
-    /** @description Too Many Requests */
-    RateLimitError: {
-      headers: {
-        [name: string]: unknown
-      }
-      content: {
-        /**
-         * @example {
-         *       "type": "https://api.example.com/errors/rate-limited",
-         *       "title": "Too Many Requests",
-         *       "detail": "Rate limit exceeded. Try again in 60 seconds.",
-         *       "code": "RATE_LIMITED",
-         *       "retryable": true
-         *     }
-         */
-        'application/problem+json': components['schemas']['ErrorData']
-      }
-    }
-    /** @description Internal Server Error */
-    InternalServerError: {
-      headers: {
-        [name: string]: unknown
-      }
-      content: {
-        /**
-         * @example {
-         *       "type": "https://api.example.com/errors/internal-error",
-         *       "title": "Internal Server Error",
-         *       "detail": "An unexpected error occurred",
-         *       "code": "INTERNAL_ERROR",
-         *       "retryable": true
-         *     }
-         */
-        'application/problem+json': components['schemas']['ErrorData']
-      }
-    }
   }
   parameters: {
     /** @description Maximum number of results per page */
@@ -2935,6 +2999,43 @@ export interface components {
 }
 export type $defs = Record<string, never>
 export interface operations {
+  resolve_workflow_output_schemas: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WorkflowOutputSchemasRequest']
+      }
+    }
+    responses: {
+      /** @description Output schemas for the supplied node configurations */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkflowOutputSchemasResponse']
+        }
+      }
+      400: components['responses']['BadRequestError']
+      401: components['responses']['UnauthorizedError']
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['DetailedValidationProblemDetail']
+        }
+      }
+      429: components['responses']['RateLimitError']
+      500: components['responses']['InternalServerError']
+    }
+  }
   list_workflows: {
     parameters: {
       query?: {

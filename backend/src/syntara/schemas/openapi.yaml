@@ -25885,6 +25885,91 @@ paths:
                 detail: Rate limit exceeded. Try again in 60 seconds.
                 code: RATE_LIMITED
                 retryable: true
+  /workflows/output-schemas:
+    post:
+      summary: Resolve workflow node output schemas
+      description: |
+        Resolve expected output schemas for the supplied draft nodes without saving a workflow.
+
+        Requires authentication but no workflow/project permission because this is a stateless,
+        side-effect-free operation over caller-supplied node configuration. Form definitions are
+        parsed locally; expressions, dynamic option queries, integrations, and workflow activities
+        are never evaluated.
+      operationId: resolve_workflow_output_schemas
+      tags:
+        - Workflows
+      security:
+        - bearerAuth: []
+      x-app-permission:
+        resource: null
+        action: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowOutputSchemasRequest'
+      responses:
+        '200':
+          description: Output schemas for the supplied node configurations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowOutputSchemasResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorData'
+              example:
+                type: https://api.example.com/errors/bad-request
+                title: Bad Request
+                detail: The request was malformed or contained invalid parameters
+                code: BAD_REQUEST
+                retryable: false
+        '401':
+          description: Unauthorized
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorData'
+              example:
+                type: https://api.example.com/errors/unauthorized
+                title: Unauthorized
+                detail: Authentication is required to access this resource
+                code: UNAUTHORIZED
+                retryable: false
+        '422':
+          description: Unprocessable Content
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/DetailedValidationProblemDetail'
+        '429':
+          description: Too Many Requests
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorData'
+              example:
+                type: https://api.example.com/errors/rate-limited
+                title: Too Many Requests
+                detail: Rate limit exceeded. Try again in 60 seconds.
+                code: RATE_LIMITED
+                retryable: true
+        '500':
+          description: Internal Server Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorData'
+              example:
+                type: https://api.example.com/errors/internal-error
+                title: Internal Server Error
+                detail: An unexpected error occurred
+                code: INTERNAL_ERROR
+                retryable: true
   /workflows:
     get:
       summary: List workflows
@@ -37431,6 +37516,12 @@ components:
           additionalProperties: true
           type: object
           title: Workflow Definition
+        node_output_schemas:
+          type: object
+          description: Read-only output schemas derived from configured form nodes, keyed by actual node ID.
+          readOnly: true
+          additionalProperties:
+            $ref: '#/components/schemas/NodeOutputSchemaEntry'
         change_description:
           anyOf:
             - type: string
@@ -37476,6 +37567,86 @@ components:
           type: string
           format: date-time
           title: Updated At
+    WorkflowOutputSchemaNode:
+      type: object
+      title: WorkflowOutputSchemaNode
+      description: Bounded partial node configuration used for stateless output schema resolution.
+      required:
+        - id
+        - type
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+        type:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[a-z][a-z0-9_]*$
+        parameters:
+          type: object
+          additionalProperties: true
+          description: Incomplete node parameters are accepted so findings can be returned per node.
+        outputs:
+          anyOf:
+            - type: object
+              maxProperties: 100
+              propertyNames:
+                maxLength: 128
+              additionalProperties:
+                type: string
+                maxLength: 2048
+            - type: 'null'
+          description: Optional output extraction mapping.
+    WorkflowOutputSchemasRequest:
+      type: object
+      title: WorkflowOutputSchemasRequest
+      additionalProperties: false
+      required:
+        - nodes
+      properties:
+        nodes:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/WorkflowOutputSchemaNode'
+    NodeOutputSchemaEntry:
+      type: object
+      title: NodeOutputSchemaEntry
+      additionalProperties: false
+      required:
+        - status
+        - findings
+      properties:
+        status:
+          type: string
+          enum:
+            - available
+            - invalid
+            - unsupported
+        output_schema:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationFinding'
+    WorkflowOutputSchemasResponse:
+      type: object
+      title: WorkflowOutputSchemasResponse
+      additionalProperties: false
+      required:
+        - node_output_schemas
+      properties:
+        node_output_schemas:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/NodeOutputSchemaEntry'
     PublishVersionRequest:
       type: object
       title: PublishVersionRequest

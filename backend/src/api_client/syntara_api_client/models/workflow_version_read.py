@@ -14,6 +14,7 @@ from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
     from ..models.user_reference import UserReference
+    from ..models.workflow_version_read_node_output_schemas import WorkflowVersionReadNodeOutputSchemas
     from ..models.workflow_version_read_workflow_definition import WorkflowVersionReadWorkflowDefinition
 
 
@@ -32,6 +33,8 @@ class WorkflowVersionRead:
         workflow_definition (WorkflowVersionReadWorkflowDefinition):
         created_at (datetime.datetime):
         updated_at (datetime.datetime):
+        node_output_schemas (WorkflowVersionReadNodeOutputSchemas | Unset): Read-only output schemas derived from
+            configured form nodes, keyed by actual node ID.
         change_description (None | str | Unset):
         status (WorkflowVersionReadStatus | Unset):  Default: WorkflowVersionReadStatus.DRAFT.
         last_published_at (datetime.datetime | None | Unset):
@@ -47,6 +50,7 @@ class WorkflowVersionRead:
     workflow_definition: WorkflowVersionReadWorkflowDefinition
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    node_output_schemas: WorkflowVersionReadNodeOutputSchemas | Unset = UNSET
     change_description: None | str | Unset = UNSET
     status: WorkflowVersionReadStatus | Unset = WorkflowVersionReadStatus.DRAFT
     last_published_at: datetime.datetime | None | Unset = UNSET
@@ -71,6 +75,10 @@ class WorkflowVersionRead:
         created_at = self.created_at.isoformat()
 
         updated_at = self.updated_at.isoformat()
+
+        node_output_schemas: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.node_output_schemas, Unset):
+            node_output_schemas = self.node_output_schemas.to_dict()
 
         change_description: None | str | Unset
         if isinstance(self.change_description, Unset):
@@ -125,6 +133,8 @@ class WorkflowVersionRead:
                 "updated_at": updated_at,
             }
         )
+        if node_output_schemas is not UNSET:
+            field_dict["node_output_schemas"] = node_output_schemas
         if change_description is not UNSET:
             field_dict["change_description"] = change_description
         if status is not UNSET:
@@ -143,6 +153,7 @@ class WorkflowVersionRead:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.user_reference import UserReference
+        from ..models.workflow_version_read_node_output_schemas import WorkflowVersionReadNodeOutputSchemas
         from ..models.workflow_version_read_workflow_definition import WorkflowVersionReadWorkflowDefinition
 
         d = dict(src_dict)
@@ -159,6 +170,13 @@ class WorkflowVersionRead:
         created_at = isoparse(d.pop("created_at"))
 
         updated_at = isoparse(d.pop("updated_at"))
+
+        _node_output_schemas = d.pop("node_output_schemas", UNSET)
+        node_output_schemas: WorkflowVersionReadNodeOutputSchemas | Unset
+        if isinstance(_node_output_schemas, Unset):
+            node_output_schemas = UNSET
+        else:
+            node_output_schemas = WorkflowVersionReadNodeOutputSchemas.from_dict(_node_output_schemas)
 
         def _parse_change_description(data: object) -> None | str | Unset:
             if data is None:
@@ -244,6 +262,7 @@ class WorkflowVersionRead:
             workflow_definition=workflow_definition,
             created_at=created_at,
             updated_at=updated_at,
+            node_output_schemas=node_output_schemas,
             change_description=change_description,
             status=status,
             last_published_at=last_published_at,

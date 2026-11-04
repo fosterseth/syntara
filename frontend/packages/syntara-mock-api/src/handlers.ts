@@ -13,6 +13,7 @@ import {
   IntegrationStatusEnum,
   IntegrationTypeEnum,
   WorkflowVersionStatusEnum,
+  getNodeOutputSchema,
 } from '@syntara/contracts'
 import { credentials, credentialTypes, credentialWorkflows } from './resources/credentials'
 import { integrations } from './resources/integrations'
@@ -94,6 +95,168 @@ type MockVersionRecord = {
   updated_at: string
   deleted_at: null
   deleted_by: null
+  node_output_schemas?: Record<string, OutputSchemaEntry>
+}
+
+type OutputSchemaEntry = WorkflowAPI.components['schemas']['NodeOutputSchemaEntry']
+type OutputSchemaNode = WorkflowAPI.components['schemas']['WorkflowOutputSchemaNode']
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Mock-only schema metadata. Field answer types remain owned by the backend resolver. */
+function mockOutputSchemaEntry(node: OutputSchemaNode): OutputSchemaEntry {
+  if (node.type !== 'form_prompt' && node.type !== 'form_trigger') {
+    return {
+      status: 'unsupported',
+      output_schema: null,
+      findings: [
+        {
+          severity: 'warning',
+          category: 'schema_violation',
+          message: `No mock schema provider is available for node type '${node.type}'.`,
+          node_id: node.id,
+          field_path: null,
+        },
+      ],
+    }
+  }
+
+  const rawForm = node.parameters?.form_definition
+  const rawFields = isRecordValue(rawForm) ? rawForm.fields : undefined
+  if (!Array.isArray(rawFields) || rawFields.length === 0) {
+    return {
+      status: 'invalid',
+      output_schema: null,
+      findings: [
+        {
+          severity: 'error',
+          category: 'missing_field',
+          message: 'A form definition is required to resolve this node output schema.',
+          node_id: node.id,
+          field_path: 'parameters.form_definition',
+        },
+      ],
+    }
+  }
+
+  const fields = rawFields.flatMap((rawField) => {
+    if (!isRecordValue(rawField) || typeof rawField.value_name !== 'string') return []
+    const property: Record<string, unknown> = {}
+    if (typeof rawField.label === 'string') property.title = rawField.label
+    if (typeof rawField.help_text === 'string') property.description = rawField.help_text
+    return [[rawField.value_name, property] as const]
+  })
+  if (fields.length !== rawFields.length) {
+    return {
+      status: 'invalid',
+      output_schema: null,
+      findings: [
+        {
+          severity: 'error',
+          category: 'schema_violation',
+          message: 'The authored form definition is invalid and its output schema could not be resolved.',
+          node_id: node.id,
+          field_path: 'parameters.form_definition',
+        },
+      ],
+    }
+  }
+
+  const outputFields = Object.fromEntries(fields)
+  const mapped = node.outputs
+  let outputProperties: Record<string, unknown>
+  if (node.type === 'form_trigger') {
+    const responseFields = mapped
+      ? Object.fromEntries(Object.keys(mapped).map((name) => [name, { title: name }]))
+      : outputFields
+    outputProperties = {
+      response_data: {
+        type: 'object',
+        properties: responseFields,
+        additionalProperties: false,
+      },
+    }
+  } else if (mapped) {
+    const staticFields = getNodeOutputSchema(node.type) ?? []
+    const statusField = staticFields.find((field) => field.name === 'status')
+    outputProperties = {
+      ...(statusField ? { status: { type: statusField.type, description: statusField.description } } : {}),
+      ...Object.fromEntries(
+        Object.keys(mapped)
+          .filter((name) => name !== 'status')
+          .map((name) => [name, { title: name }])
+      ),
+    }
+  } else {
+    const staticFields = getNodeOutputSchema(node.type) ?? []
+    outputProperties = Object.fromEntries(
+      staticFields.map((field) => [field.name, { type: field.type, description: field.description }])
+    )
+    outputProperties.response_data = {
+      type: 'object',
+      properties: outputFields,
+      additionalProperties: false,
+    }
+  }
+
+  return {
+    status: 'available',
+    findings: [],
+    output_schema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: outputProperties,
+      additionalProperties: false,
+    },
+  }
+}
+
+function mockOutputSchemasForNodes(nodes: OutputSchemaNode[]): Record<string, OutputSchemaEntry> {
+  return Object.fromEntries(nodes.map((node) => [node.id, mockOutputSchemaEntry(node)]))
+}
+
+function mockOutputSchemasForDefinition(definition: unknown): Record<string, OutputSchemaEntry> {
+  if (!isRecordValue(definition)) return {}
+  const workflowNodes = [
+    ...(Array.isArray(definition.triggers) ? definition.triggers : []),
+    ...(Array.isArray(definition.nodes) ? definition.nodes : []),
+  ]
+  const nodes = workflowNodes.flatMap((rawNode): OutputSchemaNode[] => {
+    if (!isRecordValue(rawNode) || typeof rawNode.id !== 'string' || typeof rawNode.type !== 'string') return []
+    const outputs = isRecordValue(rawNode.outputs)
+      ? Object.fromEntries(
+          Object.entries(rawNode.outputs).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+        )
+      : undefined
+    return [
+      {
+        id: rawNode.id,
+        type: rawNode.type,
+        parameters: isRecordValue(rawNode.parameters) ? rawNode.parameters : {},
+        ...(outputs ? { outputs } : {}),
+      },
+    ]
+  })
+  return mockOutputSchemasForNodes(nodes.filter((node) => node.type === 'form_prompt' || node.type === 'form_trigger'))
+}
+
+function withMockOutputSchemas(version: MockVersionRecord): MockVersionRecord {
+  return {
+    ...version,
+    node_output_schemas: mockOutputSchemasForDefinition(version.workflow_definition),
+  }
+}
+
+function workflowWithMockOutputSchemas(workflow: WorkflowWithVersion): WorkflowWithVersion {
+  return {
+    ...workflow,
+    version: {
+      ...workflow.version,
+      node_output_schemas: mockOutputSchemasForDefinition(workflow.version.workflow_definition),
+    },
+  }
 }
 
 const MOCK_VERSION_CREATED_BY = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -1155,6 +1318,7 @@ export const handlers = [
         version: 1,
         schema_version: body.workflow_definition?.schema_version ?? '2.0.0',
         workflow_definition: body.workflow_definition,
+        node_output_schemas: mockOutputSchemasForDefinition(body.workflow_definition),
         created_by: MOCK_VERSION_USER_REF,
         created_at: now,
         change_description: 'Initial version',
@@ -1163,7 +1327,12 @@ export const handlers = [
     }
 
     workflows.push(createdWorkflow)
-    return HttpResponse.json(createdWorkflow, { status: 201 })
+    return HttpResponse.json(workflowWithMockOutputSchemas(createdWorkflow), { status: 201 })
+  }),
+
+  http.post('/api/v1/workflows/output-schemas', async ({ request }) => {
+    const body = (await request.json()) as WorkflowAPI.components['schemas']['WorkflowOutputSchemasRequest']
+    return HttpResponse.json({ node_output_schemas: mockOutputSchemasForNodes(body.nodes) })
   }),
 
   http.post('/api/v1/workflows/validate', async (req) => {
@@ -1248,7 +1417,7 @@ export const handlers = [
         { status: 404 }
       )
     }
-    return HttpResponse.json(body)
+    return HttpResponse.json(workflowWithMockOutputSchemas(body))
   }),
   http.patch('/api/v1/workflows/:workflowId', async (request) => {
     const workflowId = request.params.workflowId
@@ -1318,6 +1487,7 @@ export const handlers = [
       version: nextVersion,
       schema_version: nextDefinition?.schema_version ?? workflow.version?.schema_version ?? '2.0.0',
       workflow_definition: nextDefinition,
+      node_output_schemas: mockOutputSchemasForDefinition(nextDefinition),
       created_by: workflow.version?.created_by ?? MOCK_VERSION_USER_REF,
       created_at: now,
       change_description: body.change_description ?? 'Updated via mock API',
@@ -1339,7 +1509,7 @@ export const handlers = [
       deleted_by: null,
     })
 
-    return HttpResponse.json(workflow)
+    return HttpResponse.json(workflowWithMockOutputSchemas(workflow))
   }),
   http.delete('/api/v1/workflows/:workflowId', (request) => {
     const workflowId = request.params.workflowId
@@ -1539,7 +1709,7 @@ export const handlers = [
       storeRecord.name = (body?.name as string) ?? null
     }
 
-    return HttpResponse.json({ ...mutableWorkflow, warning: '' })
+    return HttpResponse.json({ ...workflowWithMockOutputSchemas(mutableWorkflow), warning: '' })
   }),
 
   http.post('/api/v1/workflows/:workflowId/unpublish', (request) => {
@@ -1572,7 +1742,7 @@ export const handlers = [
       if (v.status === 'published') v.status = 'previously_published'
     }
 
-    return HttpResponse.json(mutableWorkflow)
+    return HttpResponse.json(workflowWithMockOutputSchemas(mutableWorkflow))
   }),
 
   http.patch('/api/v1/workflows/:workflowId/versions/:version', async (request) => {
@@ -1597,7 +1767,7 @@ export const handlers = [
     if (body.name !== undefined) found.name = body.name
     if (body.change_description !== undefined) found.change_description = body.change_description
     found.updated_at = new Date().toISOString()
-    return HttpResponse.json(found)
+    return HttpResponse.json(withMockOutputSchemas(found))
   }),
 
   http.get('/api/v1/workflows/:workflowId/versions', ({ request, params }) => {
@@ -1617,7 +1787,7 @@ export const handlers = [
     const includeTotal = url.searchParams.get('include_total') === 'true'
 
     const versions = getOrCreateVersionStore(workflowId, workflow)
-    const sorted = [...versions].sort((a, b) => b.version - a.version)
+    const sorted = [...versions].sort((a, b) => b.version - a.version).map(withMockOutputSchemas)
 
     return HttpResponse.json(paginate(sorted, cursor, limit, includeTotal))
   }),
@@ -1642,7 +1812,7 @@ export const handlers = [
       )
     }
 
-    return HttpResponse.json(found)
+    return HttpResponse.json(withMockOutputSchemas(found))
   }),
 
   http.post('/api/v1/workflows/:workflowId/versions/:version/restore', (request) => {
@@ -1698,12 +1868,13 @@ export const handlers = [
       version: nextVersion,
       schema_version: sourceVersion.schema_version,
       workflow_definition: restoredDef,
+      node_output_schemas: mockOutputSchemasForDefinition(restoredDef),
       created_by: MOCK_VERSION_USER_REF,
       created_at: now,
       change_description: `Restored from version ${restoredVersionNum}`,
     }
 
-    return HttpResponse.json(workflow)
+    return HttpResponse.json(workflowWithMockOutputSchemas(workflow))
   }),
 
   http.get('/api/v1/workflows/:workflowId/versions/:version/export', (request) => {

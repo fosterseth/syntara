@@ -36,6 +36,8 @@ from syntara.workflows.models import (
     WorkflowCreate,
     WorkflowListParams,
     WorkflowListResponse,
+    WorkflowOutputSchemasRequest,
+    WorkflowOutputSchemasResponse,
     WorkflowRead,
     WorkflowReadWithVersion,
     WorkflowUpdate,
@@ -49,6 +51,7 @@ from syntara.workflows.models import (
 from syntara.workflows.models.execution import ExecutionRead, TestExecutionCreate
 from syntara.workflows.models.workflow_definition import WorkflowDefinition
 from syntara.workflows.services import ExecutionService, WorkflowService
+from syntara.workflows.services.output_schema_service import resolve_node_output_schemas
 from syntara.workflows.validators import get_system_continue_on_failure, workflow_validator
 from syntara.workflows.workflow_engine.services.temporal_execution_service import TemporalExecutionService
 
@@ -263,6 +266,26 @@ async def validate_workflow_definition(
     if not result.is_valid:
         raise WorkflowDefinitionInvalidError(result)
     return result
+
+
+@_validate_router.post(
+    "/output-schemas",
+    summary="Resolve workflow node output schemas",
+    response_model=WorkflowOutputSchemasResponse,
+    dependencies=[NO_PERMISSION],
+    operation_id="resolve_workflow_output_schemas",
+    response_description="Output schemas for the supplied node configurations",
+)
+async def resolve_workflow_output_schemas(
+    request: WorkflowOutputSchemasRequest,
+    current_user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001
+) -> WorkflowOutputSchemasResponse:
+    """Resolve expected form-node outputs from caller-supplied drafts only.
+
+    This authenticated endpoint is stateless: it does not load, validate, or
+    save a workflow, and it never evaluates expressions or dynamic options.
+    """
+    return WorkflowOutputSchemasResponse(node_output_schemas=resolve_node_output_schemas(request.nodes))
 
 
 router.include_router(_validate_router)

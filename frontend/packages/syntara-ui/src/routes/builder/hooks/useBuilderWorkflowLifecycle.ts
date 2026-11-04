@@ -10,6 +10,11 @@ import type { EdgeConnection } from '../types/edge'
 import { processExistingWorkflow } from '../utils/processExistingWorkflow'
 import { WORKFLOWS_LIST_PARAMS_FOR_DEFAULT_NAME } from '../utils/workflowListQuery'
 import { DEFAULT_WORKFLOW_NAME, getNextDefaultWorkflowName } from '../utils/workflowNaming'
+import {
+  buildNodeOutputSchemaRequestNodes,
+  nodeOutputSchemasQueryKey,
+  type OutputSchemasResponse,
+} from '../panels/hooks/useResolvedNodeOutputSchemas'
 
 type WorkflowWithVersion = WorkflowAPI.components['schemas']['WorkflowReadWithVersion']
 
@@ -93,6 +98,20 @@ export function useBuilderWorkflowLifecycle(options: {
       })
     } else if (workflow?.version?.workflow_definition && !hasLoadedRef.current && workflow.id === workflowId) {
       const { flattenedWorkflow, generatedEdges, nodePositions, initPayload } = processExistingWorkflow(workflow)
+      const resolverNodes = buildNodeOutputSchemaRequestNodes(
+        workflow.version.workflow_definition.nodes,
+        workflow.version.workflow_definition.triggers
+      )
+      const savedOutputSchemas = workflow.version.node_output_schemas
+      if (resolverNodes.length > 0 && savedOutputSchemas) {
+        const resolvedIds = new Set(resolverNodes.map((node) => node.id))
+        const matchingSchemas = Object.fromEntries(
+          Object.entries(savedOutputSchemas).filter(([nodeId]) => resolvedIds.has(nodeId))
+        )
+        queryClient.setQueryData<OutputSchemasResponse>(nodeOutputSchemasQueryKey(resolverNodes), {
+          node_output_schemas: matchingSchemas,
+        })
+      }
 
       queueMicrotask(() => {
         loadWorkflowWithEdges(flattenedWorkflow, generatedEdges, nodePositions, workflow.project_id ?? null)
@@ -100,7 +119,16 @@ export function useBuilderWorkflowLifecycle(options: {
         hasLoadedRef.current = true
       })
     }
-  }, [isNew, workflow, workflowId, loadWorkflowWithEdges, workflowsListResources, dispatch, initialViewVersion])
+  }, [
+    isNew,
+    workflow,
+    workflowId,
+    loadWorkflowWithEdges,
+    workflowsListResources,
+    dispatch,
+    initialViewVersion,
+    queryClient,
+  ])
 
   useEffect(() => {
     if (!workflow || isNew || hasLoadedRef.current || workflow.id !== workflowId) {

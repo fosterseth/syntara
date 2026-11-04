@@ -32,6 +32,12 @@ from .execution import (
     ExecutionListResponse,
     ExecutionStatus,
 )
+from .output_schema import (
+    NodeOutputSchemaEntry,
+    WorkflowOutputSchemaNode,
+    WorkflowOutputSchemasRequest,
+    WorkflowOutputSchemasResponse,
+)
 from .query_params import (
     ActivityListParams,
     ExecutionIncludeParams,
@@ -96,6 +102,7 @@ __all__ = [
     "ExecutionStatus",
     "ExecutionStreamingQueryParams",
     "JsonPatchOperation",
+    "NodeOutputSchemaEntry",
     "PublishAction",
     "PublishVersionRequest",
     "PublishWorkflowVersionResponse",
@@ -112,6 +119,9 @@ __all__ = [
     "WorkflowDefinition",
     "WorkflowListParams",
     "WorkflowListResponse",
+    "WorkflowOutputSchemaNode",
+    "WorkflowOutputSchemasRequest",
+    "WorkflowOutputSchemasResponse",
     "WorkflowPublishEvent",
     "WorkflowRead",
     "WorkflowReadWithVersion",

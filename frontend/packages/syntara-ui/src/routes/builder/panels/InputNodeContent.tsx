@@ -3,8 +3,10 @@ import { RhUiCloseIcon } from '@patternfly/react-icons'
 import { getNodeOutputSchema, TriggerTypeEnum } from '@syntara/contracts'
 
 import type { UpstreamNodeInfo } from './hooks/useUpstreamNodes'
+import type { OutputSchemaEntry } from './hooks/useResolvedNodeOutputSchemas'
 import { InputEmptyState } from './InputEmptyState'
 import { getTriggerInputSchemaFields } from './utils/triggerSchemaUtils'
+import { buildMappedOutputFallbackSchema } from './utils/schemaToPreviewFields'
 import { InputJsonView } from './views/InputJsonView'
 import { InputSchemaPreview } from './views/InputSchemaPreview'
 import { InputSchemaView } from './views/InputSchemaView'
@@ -17,6 +19,7 @@ const TRIGGER_TYPES: ReadonlySet<string> = new Set([
   TriggerTypeEnum.EVENT,
   TriggerTypeEnum.WEBHOOK_TRIGGER,
   TriggerTypeEnum.EDA_TRIGGER,
+  TriggerTypeEnum.FORM_TRIGGER,
 ])
 
 export type InputNodeContentProps = {
@@ -28,6 +31,10 @@ export type InputNodeContentProps = {
   searchTerm: string
   onRunPreviousSteps?: () => void
   workflowId?: string | null
+  outputSchemaEntry?: OutputSchemaEntry
+  isResolvingOutputSchema?: boolean
+  outputSchemaError?: unknown
+  onRetryOutputSchema?: () => void
 }
 
 export function InputNodeContent({
@@ -39,6 +46,10 @@ export function InputNodeContent({
   searchTerm,
   onRunPreviousSteps,
   workflowId,
+  outputSchemaEntry,
+  isResolvingOutputSchema = false,
+  outputSchemaError,
+  onRetryOutputSchema,
 }: Readonly<InputNodeContentProps>) {
   const nodeData = hasData ? (mergedExecutionData?.[upstreamNode.id] ?? null) : null
   const expressionNodeId = TRIGGER_TYPES.has(upstreamNode.type) ? 'trigger' : upstreamNode.id
@@ -46,7 +57,10 @@ export function InputNodeContent({
   if (!nodeData) {
     const schema = getNodeOutputSchema(upstreamNode.type)
     const effectiveSchema = schema ?? getTriggerInputSchemaFields(upstreamNode.id, triggers)
-    if (!effectiveSchema) {
+    const resolvedOutputSchema = outputSchemaEntry?.status === 'available' ? outputSchemaEntry.output_schema : undefined
+    const mappedFallbackSchema = buildMappedOutputFallbackSchema(upstreamNode.type, upstreamNode.outputs)
+    const previewSchema = resolvedOutputSchema ?? mappedFallbackSchema
+    if (!effectiveSchema && !previewSchema) {
       const supportsInputSchema =
         upstreamNode.type === TriggerTypeEnum.MANUAL_TRIGGER ||
         upstreamNode.type === TriggerTypeEnum.WEBHOOK_TRIGGER ||
@@ -55,6 +69,30 @@ export function InputNodeContent({
     }
     return (
       <Stack hasGutter>
+        {Boolean(outputSchemaError) && (
+          <StackItem>
+            <Alert variant="danger" isInline title="Unable to resolve form output fields">
+              Showing generic output fields.{' '}
+              {onRetryOutputSchema && (
+                <Button variant="link" onClick={onRetryOutputSchema} isInline>
+                  Retry
+                </Button>
+              )}
+            </Alert>
+          </StackItem>
+        )}
+        {!outputSchemaError && isResolvingOutputSchema && !resolvedOutputSchema && (
+          <StackItem>
+            <Alert variant="info" isInline isPlain title="Resolving form output fields" />
+          </StackItem>
+        )}
+        {outputSchemaEntry?.status === 'invalid' && (
+          <StackItem>
+            <Alert variant="warning" isInline title="Form output fields are unavailable">
+              Showing generic output fields. {outputSchemaEntry.findings[0]?.message}
+            </Alert>
+          </StackItem>
+        )}
         {onRunPreviousSteps && workflowId && (
           <StackItem>
             <Alert variant="info" isInline isPlain title="Expected input fields">
@@ -66,7 +104,11 @@ export function InputNodeContent({
           </StackItem>
         )}
         <StackItem>
-          <InputSchemaPreview fields={effectiveSchema} nodeId={expressionNodeId} />
+          <InputSchemaPreview
+            fields={previewSchema ? undefined : (effectiveSchema ?? undefined)}
+            outputSchema={previewSchema}
+            nodeId={expressionNodeId}
+          />
         </StackItem>
       </Stack>
     )

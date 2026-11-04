@@ -334,6 +334,12 @@ components:
           additionalProperties: true
           type: object
           title: Workflow Definition
+        node_output_schemas:
+          type: object
+          description: Read-only output schemas derived from configured form nodes, keyed by actual node ID.
+          readOnly: true
+          additionalProperties:
+            $ref: ./openapi.yaml#/components/schemas/NodeOutputSchemaEntry
         change_description:
           anyOf:
             - type: string

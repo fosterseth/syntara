@@ -19,8 +19,10 @@ import { selectActivities } from '../../../stores/workflowStoreSelectors'
 import { useIsVersionView } from '../VersionViewContext'
 
 import { InlineMockEditor } from './InlineMockEditor'
+import { useResolvedNodeOutputSchemas } from './hooks/useResolvedNodeOutputSchemas'
 import styles from './panels.module.css'
 import { buildMockJsonSkeleton, parseJsonObject } from './utils/mockDataUtils'
+import { buildJsonSchemaMockSkeleton, buildMappedOutputFallbackSchema } from './utils/schemaToPreviewFields'
 import { OutputJsonView } from './views/OutputJsonView'
 import { OutputSchemaView } from './views/OutputSchemaView'
 import { OutputTableView } from './views/OutputTableView'
@@ -42,6 +44,7 @@ export function OutputPanel({ outputData, nodeId }: Readonly<OutputPanelProps>) 
   const unpinOutputMock = useMockDataStore((s) => s.unpinOutputMock)
   const outputMock = useMockDataStore((s) => s.getOutputMock(nodeId))
   const activities = useWorkflowStore(selectActivities)
+  const outputSchemaQuery = useResolvedNodeOutputSchemas()
 
   const nodeType = useMemo(() => {
     const activity = activities?.find((a) => a.id === nodeId)
@@ -56,6 +59,14 @@ export function OutputPanel({ outputData, nodeId }: Readonly<OutputPanelProps>) 
     if (outputData) {
       return JSON.stringify(outputData, null, 2)
     }
+
+    const outputSchemaEntry = outputSchemaQuery.nodeOutputSchemas[nodeId]
+    if (outputSchemaEntry?.status === 'available' && outputSchemaEntry.output_schema) {
+      return buildJsonSchemaMockSkeleton(outputSchemaEntry.output_schema)
+    }
+    const nodeOutputs = activities?.find((activity) => activity.id === nodeId)?.outputs
+    const mappedFallbackSchema = buildMappedOutputFallbackSchema(nodeType ?? '', nodeOutputs)
+    if (mappedFallbackSchema) return buildJsonSchemaMockSkeleton(mappedFallbackSchema)
 
     // Fallback: use the node type's output schema
     const skeleton = buildMockJsonSkeleton(nodeType, null)

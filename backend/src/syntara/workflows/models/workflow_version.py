@@ -18,6 +18,7 @@ from syntara.core.jsonb_limits import WorkflowDefinitionValidator
 from syntara.core.models.base import UserOwnedResource
 from syntara.core.models.pagination import ResourcesResponse
 from syntara.core.models.user_reference import UserReference, UserReferenceFieldsMixin
+from syntara.workflows.models.output_schema import NodeOutputSchemaEntry
 from syntara.workflows.models.workflow_definition import WorkflowDefinition
 
 if TYPE_CHECKING:
@@ -156,6 +157,11 @@ class WorkflowVersionRead(UserReferenceFieldsMixin, SQLModel):
     version: int
     schema_version: str
     workflow_definition: dict[str, Any]
+    node_output_schemas: dict[str, NodeOutputSchemaEntry] = Field(
+        default_factory=dict,
+        description="Read-only output schemas derived from configured form nodes, keyed by actual node ID.",
+        schema_extra={"readOnly": True},
+    )
     change_description: str | None = None
     name: str | None = None
     status: Literal["draft", "published", "previously_published"] = "draft"

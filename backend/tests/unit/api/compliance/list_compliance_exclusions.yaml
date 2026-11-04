@@ -29,6 +29,9 @@ exclusions:
   - operation_id: validate_workflow_definition
     reason: "Validation result not a paginated list (ValidationResult), returns findings/is_valid/error_count/warning_count"
 
+  - operation_id: resolve_workflow_output_schemas
+    reason: "Output schema resolution map, not a paginated resource list"
+
   # ===========================================================================
   # TEMPORARY EXCLUSIONS (tech debt - should fix)
   # ===========================================================================

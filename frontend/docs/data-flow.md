@@ -13,9 +13,10 @@ This document explains **how data flows from the backend API to the UI**, focusi
 2. [OpenAPI Contract Generation](#openapi-contract-generation)
 3. [Type-Safe API Clients](#type-safe-api-clients)
 4. [Data Flow: Backend to UI](#data-flow-backend-to-ui)
-5. [V2 Workflow Format](#v2-workflow-format)
-6. [Canvas Rendering](#canvas-rendering)
-7. [Saving: Building the V2 Payload](#saving-building-the-v2-payload)
+5. [Form Output Schema Resolution](#form-output-schema-resolution)
+6. [V2 Workflow Format](#v2-workflow-format)
+7. [Canvas Rendering](#canvas-rendering)
+8. [Saving: Building the V2 Payload](#saving-building-the-v2-payload)
 
 ---
 
@@ -325,6 +326,16 @@ function handleSave() {
 ```
 
 **Note:** With the v2 API, workflows are already flat (nodes + edges). The save path uses `buildWorkflowDefinition()` to produce the v2 payload with security validation and port mapping.
+
+---
+
+## Form Output Schema Resolution
+
+Form prompt and form trigger output schemas are derived by the backend. Saved workflow version responses include read-only `node_output_schemas`, keyed by actual node ID. The builder also posts the current form definitions and output mappings to `POST /workflows/output-schemas`; this stateless authenticated request does not save or execute the workflow.
+
+The builder query key contains only form definitions and output mappings, so applying a form editor change refreshes the preview while layout changes do not. A workflow version's saved schema metadata seeds the query only for the matching configuration. The schema adapter renders nested JSON Schema properties and uses full path segments for copy and drag references, such as `['response_data', 'email']`.
+
+When a schema cannot be resolved, the builder shows generic static output metadata. If a form has an output mapping, the fallback shows the mapped keys so it does not suggest raw fields that the mapping removes. Mock editors use the same resolved schema to build nested placeholders and never copy form defaults.
 
 ---
 

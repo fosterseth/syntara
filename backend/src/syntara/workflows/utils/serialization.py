@@ -49,12 +49,19 @@ def deserialize_workflow_version(
 
     ts = publish_timestamps.get(version.id) if publish_timestamps else None
 
+    from syntara.workflows.services.output_schema_service import (  # noqa: PLC0415
+        node_output_schemas_for_workflow_definition,
+    )
+
+    node_output_schemas = node_output_schemas_for_workflow_definition(version.workflow_definition)
+
     return {
         "id": version.id,
         "workflow_id": version.workflow_id,
         "version": version.version,
         "schema_version": version.schema_version,
         "workflow_definition": version.workflow_definition,
+        "node_output_schemas": node_output_schemas,
         "change_description": version.change_description,
         "name": version.name,
         "status": status,
